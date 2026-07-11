@@ -40,10 +40,12 @@ Vagrant.configure("2") do |config|
     chown -R vagrant:vagrant /home/vagrant/.kube
     echo 'export KUBECONFIG=/home/vagrant/.kube/config' >> /home/vagrant/.profile
 
-    sed 's/127.0.0.1:6443/127.0.0.1:16443/' /etc/rancher/k3s/k3s.yaml > /vagrant/kubeconfig.yaml
-    chmod 600 /vagrant/kubeconfig.yaml
+    sed 's/127.0.0.1:6443/127.0.0.1:16443/' /etc/rancher/k3s/k3s.yaml > /home/vagrant/kubeconfig.yaml
+    chmod 600 /home/vagrant/kubeconfig.yaml
+    chown vagrant:vagrant /home/vagrant/kubeconfig.yaml
     echo ""
-    echo "==> VM ready. To use kubectl from your Mac:"
-    echo "    export KUBECONFIG=\$(pwd)/Vagrant/kubeconfig.yaml"
+    echo "==> VM ready. Run this on your Mac to configure kubectl:"
+    echo "    vagrant ssh -c 'cat /home/vagrant/kubeconfig.yaml' > kubeconfig.yaml"
+    echo "    export KUBECONFIG=\$(pwd)/kubeconfig.yaml"
   SHELL
 end

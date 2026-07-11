@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -10,6 +11,13 @@ import (
 
 	"arteci-go/internal/observability"
 )
+
+// Google Drive file IDs — add missing IDs when files are shared.
+var driveFileIDs = map[string]string{
+	"lst_of_users_anon_2.csv": "1547HnOZWAGCE5YoweHhUuSd_1AiueqaP",
+	// "lst_of_users_anon_1.csv": "<DRIVE_FILE_ID>",
+	// "lst_of_users_anon_3.csv": "<DRIVE_FILE_ID>",
+}
 
 func (m *MinioClient) EnsureBucket(ctx context.Context) error {
 	exists, err := m.client.BucketExists(ctx, m.Bucket)
@@ -34,34 +42,75 @@ func (m *MinioClient) SeedBucket(ctx context.Context, searchDirs []string, files
 			continue
 		}
 
-		uploaded := false
-		for _, dir := range searchDirs {
-			path := filepath.Join(dir, f)
-			fh, err := os.Open(path)
-			if err != nil {
-				continue
-			}
-			fi, err := fh.Stat()
-			if err != nil {
-				fh.Close()
-				continue
-			}
-			_, putErr := m.client.PutObject(ctx, m.Bucket, f, fh, fi.Size(), minio.PutObjectOptions{
-				ContentType: "text/csv",
-			})
-			fh.Close()
-			if putErr == nil {
-				observability.MinioLog.Info(ctx, "Seed: file uploaded to bucket", observability.Attrs{
-					"file": f, "source": dir, "bucket": m.Bucket,
-				})
-				uploaded = true
-				break
-			}
+		if m.seedFromDrive(ctx, f) {
+			continue
 		}
-		if !uploaded {
-			observability.MinioLog.Info(ctx, "Seed: file not found in any search dir, skipped", observability.Attrs{
-				"file": f, "bucket": m.Bucket,
+		if m.seedFromLocal(ctx, f, searchDirs) {
+			continue
+		}
+		observability.MinioLog.Info(ctx, "Seed: file not found in any source, skipped", observability.Attrs{
+			"file": f, "bucket": m.Bucket,
+		})
+	}
+}
+
+func (m *MinioClient) seedFromLocal(ctx context.Context, f string, searchDirs []string) bool {
+	for _, dir := range searchDirs {
+		path := filepath.Join(dir, f)
+		fh, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		fi, err := fh.Stat()
+		if err != nil {
+			fh.Close()
+			continue
+		}
+		_, putErr := m.client.PutObject(ctx, m.Bucket, f, fh, fi.Size(), minio.PutObjectOptions{ContentType: "text/csv"})
+		fh.Close()
+		if putErr == nil {
+			observability.MinioLog.Info(ctx, "Seed: file uploaded from local", observability.Attrs{
+				"file": f, "source": dir, "bucket": m.Bucket,
 			})
+			return true
 		}
 	}
+	return false
+}
+
+func (m *MinioClient) seedFromDrive(ctx context.Context, f string) bool {
+	id, ok := driveFileIDs[f]
+	if !ok {
+		return false
+	}
+	url := "https://drive.usercontent.google.com/download?id=" + id + "&export=download&confirm=t"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		observability.MinioLog.Info(ctx, "Seed: Google Drive download failed", observability.Attrs{
+			"file": f, "error": err.Error(),
+		})
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		observability.MinioLog.Info(ctx, "Seed: Google Drive returned non-200", observability.Attrs{
+			"file": f, "status": resp.StatusCode,
+		})
+		return false
+	}
+	_, putErr := m.client.PutObject(ctx, m.Bucket, f, resp.Body, resp.ContentLength, minio.PutObjectOptions{ContentType: "text/csv"})
+	if putErr != nil {
+		observability.MinioLog.Info(ctx, "Seed: Google Drive upload to MinIO failed", observability.Attrs{
+			"file": f, "error": putErr.Error(),
+		})
+		return false
+	}
+	observability.MinioLog.Info(ctx, "Seed: file downloaded from Google Drive", observability.Attrs{
+		"file": f, "bucket": m.Bucket,
+	})
+	return true
 }
