@@ -29,12 +29,21 @@ func (m *MinioClient) EnsureBucket(ctx context.Context) error {
 			return fmt.Errorf("create bucket %s: %w", m.Bucket, err)
 		}
 		observability.MinioLog.Info(ctx, "Bucket created", observability.Attrs{"bucket": m.Bucket})
+	} else {
+		observability.MinioLog.Info(ctx, "Bucket already exists  ready", observability.Attrs{"bucket": m.Bucket})
 	}
 	return nil
 }
 
 func (m *MinioClient) SeedBucket(ctx context.Context, searchDirs []string, files []string) {
+	observability.MinioLog.Info(ctx, "Seed: starting bucket seed check", observability.Attrs{
+		"bucket":     m.Bucket,
+		"file_count": len(files),
+	})
 	for _, f := range files {
+		observability.MinioLog.Info(ctx, "Seed: checking file presence", observability.Attrs{
+			"file": f, "bucket": m.Bucket,
+		})
 		if _, err := m.client.StatObject(ctx, m.Bucket, f, minio.StatObjectOptions{}); err == nil {
 			observability.MinioLog.Info(ctx, "Seed: file already present, skipped", observability.Attrs{
 				"file": f, "bucket": m.Bucket,
@@ -48,7 +57,7 @@ func (m *MinioClient) SeedBucket(ctx context.Context, searchDirs []string, files
 		if m.seedFromLocal(ctx, f, searchDirs) {
 			continue
 		}
-		observability.MinioLog.Info(ctx, "Seed: file not found in any source, skipped", observability.Attrs{
+		observability.MinioLog.Warn(ctx, "Seed: file not found in any source — upload manually if needed", observability.Attrs{
 			"file": f, "bucket": m.Bucket,
 		})
 	}

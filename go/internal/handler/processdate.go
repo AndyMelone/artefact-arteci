@@ -189,6 +189,10 @@ func processCSV(
 		uploadErr <- mc.PutObject(ctx, bucket, file, pr, "text/csv")
 	}()
 
+	observability.ProcessLog.Info(ctx, "Upload stream goroutine started — pipe open", observability.Attrs{
+		"method": "processCsv", "bucket": bucket, "file": file,
+	})
+
 	bw := bufio.NewWriterSize(pw, writeBufSize)
 	scanner := bufio.NewScanner(src)
 	scanner.Buffer(make([]byte, scanBufSize), scanBufSize)
@@ -219,9 +223,24 @@ func processCSV(
 	}
 	bw.WriteString(headerLine + "\n")
 
+	observability.ProcessLog.Info(ctx, "CSV header parsed — date columns validated", observability.Attrs{
+		"method":         "processCsv",
+		"bucket":         bucket,
+		"file":           file,
+		"col_count":      len(headers),
+		"date_col_count": len(dateColumns),
+		"date_columns":   strings.Join(dateColumns, ","),
+	})
+
 	jobCh := make(chan batchJob, numWorkers)
 	resultCh := make(chan batchResult, numWorkers*2)
 	var wg sync.WaitGroup
+
+	observability.ProcessLog.Info(ctx, "Worker pool started — streaming normalization in progress", observability.Attrs{
+		"method":      "processCsv",
+		"num_workers": numWorkers,
+		"batch_size":  batchSize,
+	})
 
 	for range numWorkers {
 		go func() {
@@ -270,6 +289,7 @@ func processCSV(
 	go func() {
 		defer src.Close()
 		batchID := 0
+		batchCount := 0
 		batch := make([]string, 0, batchSize)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -282,13 +302,20 @@ func processCSV(
 				jobCh <- batchJob{id: batchID, lines: batch, colIdxs: colIdxs, hints: hints}
 				batch = make([]string, 0, batchSize)
 				batchID++
+				batchCount++
 			}
 		}
 		if len(batch) > 0 {
 			wg.Add(1)
 			jobCh <- batchJob{id: batchID, lines: batch, colIdxs: colIdxs, hints: hints}
+			batchCount++
 		}
 		close(jobCh)
+		observability.ProcessLog.Info(ctx, "All batches dispatched to worker pool", observability.Attrs{
+			"method":      "processCsv",
+			"batch_count": batchCount,
+			"num_workers": numWorkers,
+		})
 		wg.Wait()
 		close(resultCh)
 	}()
@@ -348,11 +375,25 @@ func processCSV(
 	bw.Flush()
 	pw.Close()
 
+	observability.ProcessLog.Info(ctx, "Write buffer flushed — waiting for MinIO upload confirmation", observability.Attrs{
+		"method":     "processCsv",
+		"bucket":     bucket,
+		"file":       file,
+		"total_rows": totalRows,
+	})
+
 	if err := <-uploadErr; err != nil {
 		return nil, totalRows, totalFailed, fmt.Errorf("minio upload: %w", err)
 	}
 
-	// fix 1 — logger un échantillon des valeurs non parsées par colonne
+	observability.ProcessLog.Info(ctx, "MinIO write confirmed — file updated in place", observability.Attrs{
+		"method":      "processCsv",
+		"bucket":      bucket,
+		"file":        file,
+		"total_rows":  totalRows,
+		"rows_failed": totalFailed,
+	})
+
 	for i, idx := range colIdxs {
 		if samples, ok := allFailedSamples[idx]; ok {
 			observability.ProcessLog.Warn(ctx, "Unparsed date values detected — verify format hints", observability.Attrs{
