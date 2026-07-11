@@ -52,7 +52,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: arteci
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: signoz-otel-collector:4317
       OTEL_SERVICE_NAME: arteci-api-go
     depends_on:
       minio-init:
@@ -66,3 +66,5 @@ volumes:
 
 networks:
   arteci:
+    external: true
+    name: arteci

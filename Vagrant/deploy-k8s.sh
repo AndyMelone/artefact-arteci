@@ -11,7 +11,22 @@ if [ ! -f "$KUBECONFIG" ]; then
   vagrant -C "$SCRIPT_DIR" ssh -c "cat /home/vagrant/kubeconfig.yaml" > "$KUBECONFIG"
 fi
 
-echo "==> Applying manifests..."
+echo "==> Installing SigNoz (observability stack)..."
+kubectl apply -f "$K8S/signoz/namespace.yaml"
+helm repo add signoz https://charts.signoz.io 2>/dev/null || true
+helm repo update signoz
+if helm status signoz -n monitoring > /dev/null 2>&1; then
+  echo "    SigNoz already installed, skipping"
+else
+  helm install signoz signoz/signoz \
+    -n monitoring \
+    -f "$K8S/signoz/helm-values.yaml" \
+    --timeout 10m \
+    --wait
+fi
+
+echo ""
+echo "==> Applying arteci manifests..."
 kubectl apply -f "$K8S/namespace.yaml"
 kubectl apply -f "$K8S/go/api-secret.yaml"
 kubectl apply -f "$K8S/go/api-configmap.yaml"
@@ -34,4 +49,5 @@ kubectl rollout status deployment/arteci-api -n arteci --timeout=120s
 
 echo ""
 echo "==> Stack ready."
-echo "    curl http://localhost:3001/health"
+echo "    API    : curl http://localhost:3001/health"
+echo "    SigNoz : kubectl port-forward svc/signoz-frontend 3301:3301 -n monitoring"

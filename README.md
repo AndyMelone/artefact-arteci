@@ -111,18 +111,26 @@ Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de 
 ### Option B — Avec Docker Compose
 
 ```bash
+# 1. Démarrer SigNoz 
+docker compose -f docker/docker-compose.signoz.yml up -d
+
+# 2. Démarrer la stack arteci
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 
-- API Go : `http://localhost:3001`
-- MinIO Console : `http://localhost:9001` (minioadmin / minioadmin)
+| Service | URL |
+|---------|-----|
+| API Go | `http://localhost:3001` |
+| MinIO Console | `http://localhost:9001` (minioadmin / minioadmin) |
+| SigNoz UI | `http://localhost:3301` |
 
-Le bucket `arteci` est créé et les fichiers de `ressources/` ou `fixtures/` sont uploadés automatiquement.
+Les traces OTel sont visibles dans SigNoz — sélectionner le service `arteci-api-go` dans l'onglet **Services**.
 
 Pour arrêter et tout supprimer (volumes inclus) :
 
 ```bash
 docker compose -f docker/docker-compose.yml down -v
+docker compose -f docker/docker-compose.signoz.yml down -v
 ```
 
 ### Option C — Kubernetes (k3s via Vagrant)
@@ -140,9 +148,16 @@ vagrant up
 
 Le script `deploy-k8s.sh` :
 - Copie automatiquement le kubeconfig depuis la VM
-- Applique les 9 manifests dans le bon ordre
-- Attend que MinIO soit healthy, que le job d'init soit terminé, que l'API soit prête
-- Affiche `curl http://localhost:3001/health` quand tout est up
+- Installe **SigNoz** via Helm (namespace `monitoring`)
+- Applique les manifests arteci dans le bon ordre
+- Attend que MinIO, le job d'init et l'API soient prêts
+
+Accès à SigNoz après déploiement :
+
+```bash
+kubectl port-forward svc/signoz-frontend 3301:3301 -n monitoring
+# Ouvrir http://localhost:3301
+```
 
 Pour arrêter la VM :
 
@@ -193,10 +208,12 @@ Cellule vide ou valeur non parseable → retournée telle quelle, sans erreur.
 
 ## Observabilité — OTel → SigNoz
 
-Spans instrumentés :
-- `minio.getObject` — attributs : bucket, file, file_size_bytes
-- `processDate.csv` / `processDate.excel` — attributs : bucket, file, columns, total_rows, rows_failed
-- `minio.putObject` — attributs : bucket, file, duration_ms
+L'API exporte traces, métriques et logs structurés via OTLP gRPC vers un OTel Collector.
+
+| Mode | Backend traces | URL |
+|------|---------------|-----|
+| Docker Compose | SigNoz | `http://localhost:3301` |
+| Kubernetes | SigNoz | `kubectl port-forward svc/signoz-frontend 3301:3301 -n monitoring` |
 
 ---
 
