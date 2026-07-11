@@ -53,7 +53,7 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: arteci
       OTEL_EXPORTER_OTLP_ENDPOINT: ingest.us2.signoz.cloud:443
-      OTEL_EXPORTER_OTLP_HEADERS: signoz-ingestion-key=LittmG5pJjobjI8FJnTrTcBYcl4fPaLjTiAs
+      OTEL_EXPORTER_OTLP_HEADERS: signoz-ingestion-key=${SIGNOZ_INGESTION_KEY}
       OTEL_SERVICE_NAME: arteci-api-go
     depends_on:
       minio-init:

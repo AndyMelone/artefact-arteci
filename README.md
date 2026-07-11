@@ -112,6 +112,11 @@ Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de 
 ### Option B — Avec Docker Compose
 
 ```bash
+# 1. Créer le fichier de secrets (clé fournie séparément)
+cp docker/.env.example docker/.env
+# Renseigner SIGNOZ_INGESTION_KEY dans docker/.env
+
+# 2. Démarrer la stack
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 
