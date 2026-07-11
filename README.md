@@ -60,7 +60,7 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 
 | Outil | Mac | Linux | Windows |
 |-------|-----|-------|---------|
-| Go 1.22+ | `brew install go` | [go.dev/dl](https://go.dev/dl/) | [go.dev/dl](https://go.dev/dl/) |
+| Go 1.25+ | `brew install go` | [go.dev/dl](https://go.dev/dl/) | [go.dev/dl](https://go.dev/dl/) |
 | Docker (pour MinIO) | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | `apt install docker.io` | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
 
 ### Option B — Docker Compose
@@ -91,7 +91,7 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 
 ### Option A — Sans Docker (Go uniquement)
 
-Prérequis : Go 1.22+, une instance MinIO accessible.
+Prérequis : Go 1.25+, une instance MinIO accessible.
 
 ```bash
 # 1. Démarrer MinIO en local
