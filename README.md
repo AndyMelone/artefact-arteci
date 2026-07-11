@@ -87,15 +87,15 @@ Le projet exporte traces, métriques et logs via OpenTelemetry vers **SigNoz**. 
 
 Aucune installation locale. Les données sont envoyées vers l'instance Cloud managée.
 
-1. Créer un compte sur [app.us2.signoz.cloud](https://app.us2.signoz.cloud)
-2. Récupérer la clé d'ingestion : **Settings → Ingestion Keys**
-3. Renseigner la clé dans `.env` (à la racine) :
+La clé d'ingestion et l'accès à la plateforme sont fournis séparément via **Doppler** (lien inbox joint à la soumission) — aucun compte à créer.
+
+Une fois la clé reçue, la renseigner dans `.env` :
 
 ```bash
-SIGNOZ_INGESTION_KEY=<votre-clé>
+SIGNOZ_INGESTION_KEY=<clé-reçue-via-doppler>
 ```
 
-L'API se connecte automatiquement à `ingest.us2.signoz.cloud:443` avec TLS.
+L'API se connecte automatiquement à `ingest.us2.signoz.cloud:443` avec TLS. Les traces, métriques et logs sont visibles directement sur la plateforme partagée.
 
 #### Option 2 — SigNoz self-hosted
 
