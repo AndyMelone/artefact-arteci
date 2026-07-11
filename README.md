@@ -117,21 +117,19 @@ Prérequis : Go 1.25+, une instance MinIO accessible.
 ```bash
 # 1. Créer le .env à la racine
 cp .env.example .env
+# Renseigner SIGNOZ_INGESTION_KEY si observabilité Cloud souhaitée
 
-# 2. Charger les variables et démarrer MinIO
-set -a && . .env && set +a
-docker run -d \
-  -p "${MINIO_PORT:-9000}:${MINIO_PORT:-9000}" \
-  -p "${MINIO_CONSOLE_PORT:-9001}:${MINIO_CONSOLE_PORT:-9001}" \
-  -e "MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}" \
-  -e "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}" \
+# 2. Démarrer MinIO — credentials lus depuis .env via --env-file
+docker run -d -p 9000:9000 -p 9001:9001 \
+  --env-file .env \
   minio/minio server /data \
-  --address ":${MINIO_PORT:-9000}" \
-  --console-address ":${MINIO_CONSOLE_PORT:-9001}"
+  --address :9000 --console-address :9001
 
 # 3. Lancer l'API depuis go/
 cd go && go run .
 ```
+
+> Si `MINIO_PORT` ou `MINIO_CONSOLE_PORT` ont été modifiés dans `.env`, ajuster les `-p` en conséquence.
 
 L'API charge automatiquement `.env` à la racine, puis `go/.env` en fallback.
 
