@@ -1,0 +1,41 @@
+name: arteci
+
+services:
+  minio-init:
+    image: minio/mc:latest
+    container_name: arteci-minio-init
+    entrypoint: ["/bin/sh", "/scripts/minio-init.sh"]
+    volumes:
+      - ../ressources:/data/ressources:ro
+      - ./scripts/minio-init.sh:/scripts/minio-init.sh:ro
+    restart: on-failure
+    networks:
+      - arteci
+
+  api-go:
+    build:
+      context: ../go
+      dockerfile: Dockerfile
+    container_name: arteci-api-go
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      MINIO_ENDPOINT: arteci-minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: arteci
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester:4317
+      OTEL_SERVICE_NAME: arteci-api-go
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - arteci
+
+networks:
+  arteci:
+    external: true
