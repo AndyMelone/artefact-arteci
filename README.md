@@ -79,6 +79,7 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 | QEMU | `brew install qemu` | `apt install qemu-system-arm` / `qemu-system-x86` | ⚠️ non supporté (voir note) |
 | Plugin Vagrant QEMU | `vagrant plugin install vagrant-qemu` | idem | N/A |
 | kubectl | `brew install kubectl` | [k8s.io](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) | `winget install Kubernetes.kubectl` |
+| helm 3+ | `brew install helm` | [helm.sh](https://helm.sh/docs/intro/install/) | `winget install Helm.Helm` |
 
 > **Windows** : le provider QEMU n'est pas supporté nativement. Deux options :
 > - Utiliser WSL2 et lancer les commandes Vagrant depuis le terminal WSL2.
