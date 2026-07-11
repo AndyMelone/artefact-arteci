@@ -16,7 +16,6 @@ var (
 	_hostname string
 	_appName  string
 
-	// Service-level loggers — mirrors NestJS logger.child({ service: "..." })
 	MinioLog   *Logger
 	ColumnsLog *Logger
 	ProcessLog *Logger
@@ -37,10 +36,8 @@ func InitLoggers() {
 	HTTPLog = base.Child(Attrs{"service": "OtelTraceInterceptor"})
 }
 
-// Attrs is an untyped key-value map for structured log fields.
 type Attrs map[string]any
 
-// Logger emits structured JSON logs to stdout and OTel log records via OTLP.
 type Logger struct {
 	base Attrs
 }

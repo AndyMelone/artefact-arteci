@@ -6,7 +6,6 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o arteci-go .
 
-# Run — scratch = smallest possible image, no shell
 FROM scratch
 COPY --from=builder /app/arteci-go /arteci-go
 EXPOSE 3001

@@ -17,7 +17,6 @@ var (
 	MinioPutDuration metric.Int64Histogram
 )
 
-// InitMetrics creates all metric instruments — must be called after Init().
 func InitMetrics() {
 	m := otel.GetMeterProvider().Meter("arteci-api")
 
