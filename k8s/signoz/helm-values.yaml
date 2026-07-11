@@ -1,0 +1,89 @@
+# SigNoz Helm values pour ARTECI (production K8s)
+#
+# Installation :
+#   helm repo add signoz https://charts.signoz.io
+#   helm repo update
+#   kubectl apply -f k8s/signoz/namespace.yaml
+#   helm install signoz signoz/signoz \
+#     --namespace monitoring \
+#     --values k8s/signoz/helm-values.yaml \
+#     --timeout 30m
+#
+# Mise à jour :
+#   helm upgrade signoz signoz/signoz \
+#     --namespace monitoring \
+#     --values k8s/signoz/helm-values.yaml
+#
+# Accès UI :
+#   kubectl port-forward -n monitoring svc/signoz-frontend 8080:3301
+
+global:
+  storageClass: ""          # laisser vide = storageClass par défaut du cluster
+
+# ── ClickHouse ────────────────────────────────────────────────────────────────
+clickhouse:
+  replicaCount: 1           # passer à 3 en prod réelle avec ZooKeeper HA
+
+  persistence:
+    enabled: true
+    size: 50Gi
+
+# ── OTel Collector ────────────────────────────────────────────────────────────
+otelCollector:
+  replicaCount: 1
+
+# ── Query Service ─────────────────────────────────────────────────────────────
+queryService:
+  replicaCount: 1
+
+  # Désactiver la télémétrie SigNoz vers leur cloud
+  env:
+    - name: TELEMETRY_ENABLED
+      value: "false"
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+frontend:
+  replicaCount: 1
+
+  service:
+    type: ClusterIP          # exposer via Ingress ou port-forward
+    port: 3301
+
+  # Ingress (décommenter et adapter si cluster avec Ingress controller)
+  # ingress:
+  #   enabled: true
+  #   className: nginx
+  #   hosts:
+  #     - host: signoz.arteci.internal
+  #       paths:
+  #         - path: /
+  #           pathType: Prefix
+
+# ── Alertmanager ─────────────────────────────────────────────────────────────
+alertmanager:
+  enabled: true
+  replicaCount: 1
+
+# ── Ressources (ajuster selon capacité du cluster) ────────────────────────────
+resources:
+  clickhouse:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  queryService:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  otelCollector:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

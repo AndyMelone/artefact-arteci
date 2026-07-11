@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: arteci
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-minio
+          image: busybox:latest
+          command: ["sh", "-c", "until nc -z minio-service 9000; do echo waiting for minio; sleep 3; done"]
+      containers:
+        - name: minio-init
+          image: minio/mc:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mc alias set local http://minio-service:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
+              mc mb --ignore-existing local/arteci
+              echo "[minio-init] bucket arteci ready"
+          env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: arteci-api-secret
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: arteci-api-secret
+                  key: MINIO_SECRET_KEY
