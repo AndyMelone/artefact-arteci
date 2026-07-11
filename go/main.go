@@ -36,6 +36,9 @@ func main() {
 	log.Printf("MinIO connected — bucket=%s", mc.Bucket)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc("GET /columns", handler.Columns(mc))
 	mux.HandleFunc("POST /processDate", handler.ProcessDate(mc))
 
