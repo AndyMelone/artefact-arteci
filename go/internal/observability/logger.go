@@ -9,6 +9,7 @@ import (
 
 	otellog "go.opentelemetry.io/otel/log"
 	otelglobal "go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -66,13 +67,17 @@ func (l *Logger) Error(ctx context.Context, message string, attrs Attrs) {
 }
 
 func (l *Logger) emit(ctx context.Context, levelInt int, severity otellog.Severity, levelText, message string, attrs Attrs) {
-	body := make(map[string]any, 8+len(l.base)+len(attrs))
+	body := make(map[string]any, 12+len(l.base)+len(attrs))
 	body["level"] = levelInt
 	body["time"] = time.Now().UnixMilli()
 	body["pid"] = _pid
 	body["hostname"] = _hostname
 	body["app"] = _appName
 	body["message"] = message
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		body["trace_id"] = sc.TraceID().String()
+		body["span_id"] = sc.SpanID().String()
+	}
 	for k, v := range l.base {
 		body[k] = v
 	}

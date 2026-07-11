@@ -37,6 +37,11 @@ func processExcel(
 		return nil, 0, 0, fmt.Errorf("read excel: %w", err)
 	}
 
+	observability.ProcessLog.Info(ctx, "Excel file loaded into memory", observability.Attrs{
+		"method": "processExcel", "bucket": bucket, "file": file,
+		"size_bytes": int64(len(data)),
+	})
+
 	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("parse excel: %w", err)
@@ -66,7 +71,16 @@ func processExcel(
 		colIdxs[i] = idx
 	}
 
-	// Iterate rows using streaming reader for memory efficiency
+	observability.ProcessLog.Info(ctx, "Excel header parsed — date columns validated", observability.Attrs{
+		"method":         "processExcel",
+		"bucket":         bucket,
+		"file":           file,
+		"sheet":          sheetName,
+		"col_count":      len(headers),
+		"date_col_count": len(dateColumns),
+		"date_columns":   strings.Join(dateColumns, ","),
+	})
+
 	rowIter, err := f.Rows(sheetName)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("excel: cannot iterate rows: %w", err)
@@ -75,7 +89,7 @@ func processExcel(
 	preview := make([]map[string]string, 0, previewMax)
 	var totalRows, totalFailed int64
 	colCache := make(map[int]string)
-	excelRowNum := 0 // 0-indexed over all rows including header
+	excelRowNum := 0 
 
 	for rowIter.Next() {
 		row, err := rowIter.Columns()
@@ -85,7 +99,6 @@ func processExcel(
 		}
 		excelRowNum++
 		if excelRowNum == 1 {
-			// header row — skip processing
 			continue
 		}
 		totalRows++
@@ -102,7 +115,6 @@ func processExcel(
 			if !res.WasParsed && strings.TrimSpace(raw) != "" {
 				totalFailed++
 			}
-			// Excel rows and columns are 1-indexed
 			cellRef, _ := excelize.CoordinatesToCellName(colIdx+1, excelRowNum)
 			if setErr := f.SetCellStr(sheetName, cellRef, res.Normalized); setErr != nil {
 				observability.ProcessLog.Warn(ctx, "Excel: failed to set cell", observability.Attrs{
@@ -139,12 +151,15 @@ func processExcel(
 	})
 	_ = attribute.Int64("excel.total_rows", totalRows) // referenced by OTel span in caller
 
-	// Write modified workbook back to MinIO via pipe
 	pr, pw := io.Pipe()
 	uploadErr := make(chan error, 1)
 	go func() {
 		uploadErr <- mc.PutObject(ctx, bucket, file, pr, excelContentType)
 	}()
+
+	observability.ProcessLog.Info(ctx, "Excel upload goroutine started — writing workbook to pipe", observability.Attrs{
+		"method": "processExcel", "bucket": bucket, "file": file,
+	})
 
 	if err := f.Write(pw); err != nil {
 		pw.CloseWithError(err)
@@ -157,10 +172,14 @@ func processExcel(
 		return nil, totalRows, totalFailed, fmt.Errorf("minio upload: %w", err)
 	}
 
+	observability.ProcessLog.Info(ctx, "Excel uploaded to MinIO — file updated in place", observability.Attrs{
+		"method": "processExcel", "bucket": bucket, "file": file,
+		"total_rows": totalRows, "rows_failed": totalFailed,
+	})
+
 	return preview, totalRows, totalFailed, nil
 }
 
-// columnsFromExcel returns the header row of the first sheet.
 func columnsFromExcel(obj io.ReadCloser) ([]string, error) {
 	defer obj.Close()
 	data, err := io.ReadAll(obj)
