@@ -9,5 +9,5 @@ data:
   MINIO_PORT: "9000"
   MINIO_USE_SSL: "false"
   MINIO_BUCKET: arteci
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-otel-collector.monitoring.svc.cluster.local:4317
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester.monitoring.svc.cluster.local:4317
   OTEL_SERVICE_NAME: arteci-api-go
