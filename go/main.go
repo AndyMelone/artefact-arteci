@@ -35,6 +35,14 @@ func main() {
 	}
 	log.Printf("MinIO connected — bucket=%s", mc.Bucket)
 
+	if err := mc.EnsureBucket(ctx); err != nil {
+		log.Printf("[warn] bucket ensure: %v", err)
+	}
+	mc.SeedBucket(ctx,
+		[]string{"ressources", "fixtures", "../ressources", "../fixtures"},
+		[]string{"lst_of_users_anon_1.csv", "lst_of_users_anon_2.csv", "lst_of_users_anon_3.csv"},
+	)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
