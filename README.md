@@ -214,7 +214,6 @@ L'API exporte traces, métriques et logs structurés via OTLP gRPC vers un OTel 
 |------|---------------|-----|
 | Docker Compose | SigNoz | `http://localhost:3301` |
 | Kubernetes | SigNoz | `kubectl port-forward svc/signoz-frontend 3301:3301 -n monitoring` |
-
 ---
 
 
