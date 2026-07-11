@@ -9,19 +9,18 @@ API haute performance pour normaliser des colonnes de dates dans des fichiers CS
 | `GET` | `/columns?bucket=<bucket>&file=<nom>` | Liste les colonnes du fichier |
 | `POST` | `/processDate` | Normalise les dates en place, retourne les 100 premières lignes |
 | `GET` | `/health` | Health check |
-| `GET` | `/docs` | Documentation Swagger interactive |
 
 ### GET /columns
 
 ```bash
-curl "http://localhost:3001/columns?bucket=raw&file=lst_of_users_anon_1.csv"
+curl "http://localhost:3001/columns?bucket=arteci&file=lst_of_users_anon_1.csv"
 ```
 
 ### POST /processDate — body
 
 ```json
 {
-  "bucket": "raw",
+  "bucket": "arteci",
   "file": "lst_of_users_anon_1.csv",
   "date_columns": ["DATE_CREATION", "DATE_DESACTIVATION", "DATE_DERNIERE_CONNECTION_1"],
   "date_formats": ["MDY", "MDY", "MDY"]
@@ -36,6 +35,25 @@ curl "http://localhost:3001/columns?bucket=raw&file=lst_of_users_anon_1.csv"
 
 ---
 
+## Fichiers de test
+
+Les fichiers CSV de test sont disponibles ici :
+[Google Drive — Fixtures ARTECI](https://drive.google.com/drive/u/0/folders/1yhuNqSNO8FIw_vo5RRNe-UBNAmH9YnCN)
+
+Placer les fichiers téléchargés dans le dossier `ressources/` à la racine du projet :
+
+```
+ARTECI/
+└── ressources/
+    ├── lst_of_users_anon_1.csv   (28 MB — 320K lignes)
+    ├── lst_of_users_anon_2.csv   (182 MB — 2.1M lignes)
+    └── lst_of_users_anon_3.csv   (931 MB — 10.8M lignes)
+```
+
+Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dans le bucket `arteci` et les uploade s'ils manquent.
+
+---
+
 ## Démarrage rapide
 
 ### Option A — Sans Docker (Go uniquement)
@@ -43,60 +61,72 @@ curl "http://localhost:3001/columns?bucket=raw&file=lst_of_users_anon_1.csv"
 Prérequis : Go 1.22+, une instance MinIO accessible.
 
 ```bash
-# Démarrer MinIO en local si besoin
+# 1. Démarrer MinIO en local
 docker run -d -p 9000:9000 -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
   minio/minio server /data --console-address :9001
 
-# Lancer l'API Go
+# 2. Lancer l'API Go depuis la racine du projet
 cd go
 go run .
 ```
 
 L'API démarre sur `:3001`. Les variables sont configurables via `go/.env` (copier depuis `.env.example`).
 
-### Option B — Avec Docker Compose (API + MinIO)
+Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de `ressources/` sont uploadés s'ils sont absents.
+
+### Option B — Avec Docker Compose
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 
-- API : `http://localhost:3001`
+- API Go : `http://localhost:3001`
 - MinIO Console : `http://localhost:9001` (minioadmin / minioadmin)
 
-Le bucket `arteci` est créé automatiquement. Les fixtures (`fixtures/*.csv`) sont uploadées si les fichiers de production sont absents.
+Le bucket `arteci` est créé et les fichiers de `ressources/` ou `fixtures/` sont uploadés automatiquement.
 
-### Option C — Kubernetes (k3s / tout cluster K8s)
+Pour arrêter et tout supprimer (volumes inclus) :
 
 ```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/go/api-secret.yaml
-kubectl apply -f k8s/go/api-configmap.yaml
-kubectl apply -f k8s/minio/minio-deployment.yaml
-kubectl apply -f k8s/minio/minio-service.yaml
-kubectl apply -f k8s/minio/minio-init-job.yaml
-kubectl apply -f k8s/go/api-deployment.yaml
-kubectl apply -f k8s/go/api-service.yaml
+docker compose -f docker/docker-compose.yml down -v
 ```
 
-Tester localement avec Vagrant + k3s (Apple Silicon ou x86) :
+### Option C — Kubernetes (k3s via Vagrant)
+
+Prérequis : Vagrant + plugin QEMU (`vagrant plugin install vagrant-qemu`).
 
 ```bash
-cd Vagrant && vagrant up
-export KUBECONFIG=$(pwd)/kubeconfig.yaml
-kubectl get pods -n arteci
+# 1. Démarrer la VM k3s
+cd Vagrant
+vagrant up
+
+# 2. Déployer toute la stack en une commande
+./deploy-k8s.sh
+```
+
+Le script `deploy-k8s.sh` :
+- Copie automatiquement le kubeconfig depuis la VM
+- Applique les 9 manifests dans le bon ordre
+- Attend que MinIO soit healthy, que le job d'init soit terminé, que l'API soit prête
+- Affiche `curl http://localhost:3001/health` quand tout est up
+
+Pour arrêter la VM :
+
+```bash
+vagrant destroy -f
 ```
 
 ---
 
-### Uploader un fichier et appeler l'API
+### Tester l'API
 
 ```bash
-# Uploader un fichier dans MinIO
-mc alias set local http://localhost:9000 minioadmin minioadmin
-mc cp ressources/lst_of_users_anon_1.csv local/arteci/
+# Health check
+curl http://localhost:3001/health
 
-# Lister les colonnes
+# Lister les colonnes d'un fichier
 curl "http://localhost:3001/columns?bucket=arteci&file=lst_of_users_anon_1.csv"
 
 # Normaliser les dates (écriture en place dans le bucket)
@@ -125,26 +155,7 @@ Source : Qlik Talend Data Preparation 8.0.
 
 Cellule vide ou valeur non parseable → retournée telle quelle, sans erreur.
 
----
 
-## Flux streaming (mémoire-efficient)
-
-```
-MinIO <bucket>/<file> → getObject() → Readable stream
-  │
-  ├─ [CSV]  csv-parse (delimiter=';')
-  │           → DateTransformStream (normalize + collect first 100 rows)
-  │           → csv-stringify
-  │           → MinIO <bucket>/<file>  ← putObject en place (même chemin)
-  │
-  └─ [XLSX] ExcelJS WorkbookReader (streaming)
-              → DateTransformStream
-              → ExcelJS WorkbookWriter
-              → MinIO <bucket>/<file>  ← putObject en place
-```
-
-Jamais plus de 100 rows en mémoire simultanément (hors pipeline Node.js).  
-`putObject` sans taille déclarée → multipart upload automatique MinIO.
 
 ---
 
@@ -154,84 +165,10 @@ Spans instrumentés :
 - `minio.getObject` — attributs : bucket, file, file_size_bytes
 - `processDate.csv` / `processDate.excel` — attributs : bucket, file, columns, total_rows, rows_failed
 - `minio.putObject` — attributs : bucket, file, duration_ms
-- HTTP in/out via instrumentations automatiques (`@opentelemetry/instrumentation-http`)
+- HTTP in/out via middleware OTel
 
-Logs structurés via `@opentelemetry/api-logs` avec `traceId` + `spanId` corrélés.
-
----
-
-## Gestion d'erreurs
-
-| Cas | HTTP | Message |
-|-----|------|---------|
-| Fichier introuvable | 404 | `File 'path' not found in bucket 'raw'` |
-| Colonne inexistante | 422 | `Column 'X' not found in file. Available: A, B, C` |
-| Bucket inexistant | 404 | `Bucket 'raw' does not exist in MinIO` |
-| Longueurs incohérentes | 400 | `date_columns (3 items) and date_formats (2 items) must have the same length` |
-| Type de fichier non supporté | 422 | `Unsupported file type '.xyz'. Supported: csv, xlsx` |
-| Format invalide | 400 | validé par class-validator (MDY ou DMY uniquement) |
+Logs structurés avec `traceId` + `spanId` corrélés.
 
 ---
 
-## Tests
 
-```bash
-cd api
-npm install
-npm test
-npm run test:cov  # couverture
-```
-
----
-
-## Variables d'environnement
-
-| Variable | Défaut | Description |
-|----------|--------|-------------|
-| `PORT` | `3000` | Port d'écoute de l'API |
-| `MINIO_ENDPOINT` | `localhost` | Hostname MinIO |
-| `MINIO_PORT` | `9000` | Port MinIO |
-| `MINIO_USE_SSL` | `false` | TLS MinIO |
-| `MINIO_ACCESS_KEY` | `minioadmin` | Clé d'accès |
-| `MINIO_SECRET_KEY` | `minioadmin` | Clé secrète |
-| `MINIO_BUCKET` | `raw` | Bucket créé automatiquement au démarrage |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Endpoint OTLP gRPC SigNoz |
-| `OTEL_SERVICE_NAME` | `arteci-api` | Nom du service dans SigNoz |
-
----
-
-## Benchmarks (fichiers de test)
-
-| Fichier | Taille | Lignes | Target | Résultat |
-|---------|--------|--------|--------|----------|
-| lst_of_users_anon_1.csv | 28 MB | 320K | ≤ 20s | _à mesurer_ |
-| lst_of_users_anon_2.csv | 182 MB | 2.1M | ≤ 50s | _à mesurer_ |
-| lst_of_users_anon_3.csv | 931 MB | 10.8M | ≤ 2min | _à mesurer_ |
-
-> Mesurés sur MacBook Pro M2 / Docker Desktop 4.x. Renseigner après validation end-to-end.
-
----
-
-## CI/CD — GitHub Actions
-
-Pipeline `.github/workflows/ci.yml` :
-1. `go vet` → `go build` → `go test` (tests unitaires date-parser)
-2. Build Docker image multi-stage (linux/amd64 + linux/arm64)
-3. Push sur Docker Hub (branche `main` uniquement)
-
-**Secrets à configurer dans le repo GitHub :**
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
-
----
-
-## Compromis documentés
-
-| Décision | Raison | Impact |
-|----------|--------|--------|
-| NestJS/TypeScript vs Go | TypeScript = velocity P0, Go = bonus post-livraison | Port Go possible sans refactor (date-parser sans couplage NestJS) |
-| `date-fns` vs `luxon` / `dayjs` | Léger, tree-shakeable, zéro dépendances, `parse()` format-explicit | Pas de magie, comportement prévisible sur ambiguïtés |
-| csv-parse streaming vs readFile | Mémoire constante quelle que soit la taille du fichier | Légère complexité de pipeline Node.js Transform |
-| ExcelJS WorkbookReader streaming | Seule lib Node.js avec vrai streaming XLSX | Nécessite buffer complet pour fichiers >500MB avec certains encodages |
-| Écriture en place (même bucket, même chemin) | Conforme au cahier des charges | L'original est remplacé — pas de gestion de versioning |
-| SigNoz dans docker-compose.yml | Un seul fichier pour démarrer toute la stack | Démarrage ~3-4 min (ClickHouse Keeper → migrator → ingester) |
