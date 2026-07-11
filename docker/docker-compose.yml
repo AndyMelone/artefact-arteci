@@ -6,11 +6,11 @@ services:
     container_name: arteci-minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio-data:/data
     healthcheck:
@@ -26,6 +26,12 @@ services:
     image: minio/mc:latest
     container_name: arteci-minio-init
     entrypoint: ["/bin/sh", "/scripts/minio-init.sh"]
+    environment:
+      MINIO_ENDPOINT: arteci-minio
+      MINIO_PORT: "9000"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-arteci}
     volumes:
       - ../ressources:/data/ressources:ro
       - ../fixtures:/data/fixtures:ro
@@ -43,15 +49,15 @@ services:
       dockerfile: Dockerfile
     container_name: arteci-api-go
     ports:
-      - "3001:3001"
+      - "${API_PORT:-3001}:3001"
     environment:
       PORT: "3001"
       MINIO_ENDPOINT: arteci-minio
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: arteci
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-arteci}
       OTEL_EXPORTER_OTLP_ENDPOINT: ingest.us2.signoz.cloud:443
       OTEL_EXPORTER_OTLP_HEADERS: signoz-ingestion-key=${SIGNOZ_INGESTION_KEY}
       OTEL_SERVICE_NAME: arteci-api-go
