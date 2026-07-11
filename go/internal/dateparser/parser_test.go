@@ -44,6 +44,15 @@ func TestNormalize(t *testing.T) {
 		{"AM/PM morning", "7/17/2019 8:30:00 AM", HintMDY, "17-07-2019 08:30:00", true},
 		{"AM/PM afternoon", "7/17/2019 2:30:00 PM", HintMDY, "17-07-2019 14:30:00", true},
 
+		// Mixed-format fallback: hint=DMY but value is unambiguously MDY (month field > 12 under DMY)
+		{"DMY hint MDY value month>12", "12/19/2023", HintDMY, "19-12-2023 00:00:00", true},
+		{"DMY hint MDY value month>12 b", "08/27/2023", HintDMY, "27-08-2023 00:00:00", true},
+		{"DMY hint MDY leap day", "02/29/2024", HintDMY, "29-02-2024 00:00:00", true},
+
+		// Mixed-format fallback: hint=MDY but value is unambiguously DMY (day field > 12 under MDY)
+		{"MDY hint DMY value day>12", "19/12/2023", HintMDY, "19-12-2023 00:00:00", true},
+		{"MDY hint DMY value day>12 b", "27/08/2023", HintMDY, "27-08-2023 00:00:00", true},
+
 		// Edge cases
 		{"empty string", "", HintMDY, "", false},
 		{"whitespace only", "   ", HintMDY, "", false},

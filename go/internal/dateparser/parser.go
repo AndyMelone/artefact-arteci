@@ -321,6 +321,19 @@ func Normalize(value string, hint Hint, _ string) Result {
 		if t, label, ok := tryFrenchText(trimmed); ok {
 			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
 		}
+
+		if t, label, ok := tryNumericMDY(trimmed); ok {
+			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
+		}
+		if t, label, ok := tryAMPM(trimmed, HintMDY); ok {
+			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
+		}
+		if t, label, ok := tryEnglishText(trimmed); ok {
+			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
+		}
+		if t, label, ok := tryGoStdDate(trimmed); ok {
+			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
+		}
 	default: // MDY
 		if t, label, ok := tryNumericMDY(trimmed); ok {
 			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
@@ -332,6 +345,13 @@ func Normalize(value string, hint Hint, _ string) Result {
 			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
 		}
 		if t, label, ok := tryGoStdDate(trimmed); ok {
+			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
+		}
+		// Fallback: value is unambiguously DMY (e.g. day field > 12 under MDY interpretation)
+		if t, label, ok := tryNumericDMY(trimmed); ok {
+			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
+		}
+		if t, label, ok := tryFrenchText(trimmed); ok {
 			return Result{Normalized: fmt2(t), WasParsed: true, MatchedFormat: label}
 		}
 	}
