@@ -20,7 +20,7 @@ spec:
           image: melone30/arteci-api-go:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 3001
+            - containerPort: ${API_PORT}
           envFrom:
             - configMapRef:
                 name: arteci-api-config
@@ -36,12 +36,12 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 3001
+              port: ${API_PORT}
             initialDelaySeconds: 15
             periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
-              port: 3001
+              port: ${API_PORT}
             initialDelaySeconds: 5
             periodSeconds: 10

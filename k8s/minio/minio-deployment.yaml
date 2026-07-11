@@ -18,10 +18,10 @@ spec:
       containers:
         - name: minio
           image: minio/minio:latest
-          args: ["server", "/data", "--console-address", ":9001"]
+          args: ["server", "/data", "--address", ":${MINIO_PORT}", "--console-address", ":${MINIO_CONSOLE_PORT}"]
           ports:
-            - containerPort: 9000
-            - containerPort: 9001
+            - containerPort: ${MINIO_PORT}
+            - containerPort: ${MINIO_CONSOLE_PORT}
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -46,7 +46,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /minio/health/ready
-              port: 9000
+              port: ${MINIO_PORT}
             initialDelaySeconds: 10
             periodSeconds: 10
       volumes:

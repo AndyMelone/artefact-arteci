@@ -1,82 +1,187 @@
 name: signoz
 
+networks:
+  signoz:
+    driver: bridge
+  arteci:
+    name: arteci
+    driver: bridge
+
 services:
-  signoz-clickhouse:
-    image: clickhouse/clickhouse-server:24.1.2-alpine
-    container_name: signoz-clickhouse
-    restart: unless-stopped
+
+  signoz-telemetrystore-clickhouse-user-scripts:
+    container_name: signoz-telemetrystore-clickhouse-user-scripts
+    image: clickhouse/clickhouse-server:25.12.5
+    command:
+      - bash
+      - -c
+      - |
+        version="v0.0.1"
+        node_os=$$(uname -s | tr '[:upper:]' '[:lower:]')
+        node_arch=$$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
+        echo "Fetching histogram-binary for $${node_os}/$${node_arch}"
+        cd /tmp
+        wget -O histogram-quantile.tar.gz \
+          "https://github.com/SigNoz/signoz/releases/download/histogram-quantile%2F$${version}/histogram-quantile_$${node_os}_$${node_arch}.tar.gz"
+        tar -xvzf histogram-quantile.tar.gz
+        mv histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
+    restart: on-failure
     volumes:
-      - signoz-clickhouse-data:/var/lib/clickhouse
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      - signoz-telemetrystore-user-scripts:/var/lib/clickhouse/user_scripts
     networks:
       - signoz
 
-  signoz-schema-migrator:
-    image: signoz/schema-migrator:0.111.25
-    container_name: signoz-schema-migrator
-    command: ["sync"]
+
+  signoz-telemetrykeeper-clickhousekeeper-0:
+    container_name: signoz-telemetrykeeper-clickhousekeeper-0
+    image: clickhouse/clickhouse-keeper:25.12.5
+    entrypoint:
+      - /usr/bin/clickhouse-keeper
+      - --config-file=/etc/clickhouse-keeper/keeper.yaml
+    healthcheck:
+      test: ["CMD", "clickhouse-keeper-client", "-h", "localhost", "-p", "9181", "-q", "ls"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    volumes:
+      - signoz-telemetrykeeper-0-data:/var/lib/clickhouse-keeper
+      - ./signoz/telemetrykeeper/clickhousekeeper/keeper-0.yaml:/etc/clickhouse-keeper/keeper.yaml:ro
+    networks:
+      - signoz
+
+  signoz-telemetrystore-clickhouse-0-0:
+    container_name: signoz-telemetrystore-clickhouse-0-0
+    image: clickhouse/clickhouse-server:25.12.5
     environment:
-      CLICKHOUSE_URL: tcp://signoz-clickhouse:9000
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+      - CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.yaml
     depends_on:
-      signoz-clickhouse:
+      signoz-telemetrykeeper-clickhousekeeper-0:
+        condition: service_healthy
+      signoz-telemetrystore-clickhouse-user-scripts:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    volumes:
+      - signoz-telemetrystore-0-0-data:/var/lib/clickhouse
+      - signoz-telemetrystore-user-scripts:/var/lib/clickhouse/user_scripts:ro
+      - ./signoz/telemetrystore/clickhouse/config-0-0.yaml:/etc/clickhouse-server/config.yaml:ro
+      - ./signoz/telemetrystore/clickhouse/functions.yaml:/etc/clickhouse-server/functions.yaml:ro
+    networks:
+      - signoz
+
+  signoz-metastore-postgres-0:
+    container_name: signoz-metastore-postgres-0
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=signoz
+      - POSTGRES_USER=signoz
+      - POSTGRES_PASSWORD=signoz
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signoz -d signoz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - signoz-metastore-postgres-0-data:/var/lib/postgresql/data
+    networks:
+      - signoz
+
+
+  signoz-telemetrystore-migrator:
+    container_name: signoz-telemetrystore-migrator
+    image: signoz/signoz-otel-collector:latest
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate ready &&
+        /signoz-otel-collector migrate bootstrap &&
+        /signoz-otel-collector migrate sync up &&
+        /signoz-otel-collector migrate async up
+    environment:
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://signoz-telemetrystore-clickhouse-0-0:9000
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    depends_on:
+      signoz-telemetrystore-clickhouse-0-0:
+        condition: service_healthy
+      signoz-metastore-postgres-0:
         condition: service_healthy
     restart: on-failure
     networks:
       - signoz
 
-  signoz-otel-collector:
-    image: signoz/signoz-otel-collector:0.111.25
-    container_name: signoz-otel-collector
-    command: ["--config=/etc/otel-collector-config.yaml"]
-    volumes:
-      - ./signoz-otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+
+  signoz-signoz-0:
+    container_name: signoz-signoz-0
+    image: signoz/signoz:latest
+    environment:
+      - SIGNOZ_SQLSTORE_POSTGRES_DSN=postgres://signoz:signoz@signoz-metastore-postgres-0:5432/signoz?sslmode=disable
+      - SIGNOZ_SQLSTORE_PROVIDER=postgres
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://signoz-telemetrystore-clickhouse-0-0:9000
+      - SIGNOZ_TELEMETRYSTORE_PROVIDER=clickhouse
+    depends_on:
+      signoz-telemetrystore-migrator:
+        condition: service_completed_successfully
+      signoz-metastore-postgres-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - signoz
+
+
+  signoz-ingester:
+    container_name: signoz-ingester
+    image: signoz/signoz-otel-collector:latest
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate sync check &&
+        /signoz-otel-collector \
+          --config=/etc/otel-collector-config.yaml \
+          --manager-config=/etc/opamp-config.yaml \
+          --copy-path=/var/tmp/collector-config.yaml
+    environment:
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://signoz-telemetrystore-clickhouse-0-0:9000
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    depends_on:
+      signoz-telemetrystore-migrator:
+        condition: service_completed_successfully
     ports:
       - "4317:4317"
       - "4318:4318"
-    depends_on:
-      signoz-schema-migrator:
-        condition: service_completed_successfully
     restart: unless-stopped
+    volumes:
+      - ./signoz/ingester/ingester.yaml:/etc/otel-collector-config.yaml:ro
+      - ./signoz/ingester/opamp.yaml:/etc/opamp-config.yaml:ro
     networks:
+      - signoz
       - arteci
-      - signoz
-
-  signoz-query-service:
-    image: signoz/query-service:0.55.0
-    container_name: signoz-query-service
-    environment:
-      ClickHouseUrl: tcp://signoz-clickhouse:9000
-      STORAGE: clickhouse
-      TELEMETRY_ENABLED: "false"
-    depends_on:
-      signoz-schema-migrator:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    networks:
-      - signoz
-
-  signoz-frontend:
-    image: signoz/frontend:0.55.0
-    container_name: signoz-frontend
-    ports:
-      - "3301:3301"
-    depends_on:
-      - signoz-query-service
-    restart: unless-stopped
-    networks:
-      - signoz
 
 volumes:
-  signoz-clickhouse-data:
-
-networks:
-  arteci:
-    name: arteci
-    driver: bridge
-  # Signoz network for inter-service communication
-  signoz:
-    driver: bridge
+  signoz-metastore-postgres-0-data:
+    name: signoz-metastore-postgres-0-data
+  signoz-telemetrykeeper-0-data:
+    name: signoz-telemetrykeeper-0-data
+  signoz-telemetrystore-0-0-data:
+    name: signoz-telemetrystore-0-0-data
+  signoz-telemetrystore-user-scripts:
+    name: signoz-telemetrystore-user-scripts

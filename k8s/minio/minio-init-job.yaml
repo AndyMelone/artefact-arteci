@@ -11,21 +11,20 @@ spec:
       initContainers:
         - name: wait-for-minio
           image: busybox:latest
-          command: ["sh", "-c", "until nc -z minio-service 9000; do echo waiting for minio; sleep 3; done"]
+          command: ["sh", "-c", "until nc -z minio-service ${MINIO_PORT}; do echo waiting for minio; sleep 3; done"]
       containers:
         - name: minio-init
           image: minio/mc:latest
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Install wget for Google Drive fallback
               if ! command -v wget > /dev/null 2>&1; then
                 apk add --no-cache wget 2>/dev/null || true
               fi
 
-              mc alias set local http://minio-service:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
-              mc mb --ignore-existing local/arteci
-              echo "[minio-init] bucket arteci ready"
+              mc alias set local http://minio-service:${MINIO_PORT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
+              mc mb --ignore-existing "local/${MINIO_BUCKET}"
+              echo "[minio-init] bucket '${MINIO_BUCKET}' ready"
 
               get_drive_id() {
                 case "$1" in
@@ -37,7 +36,7 @@ spec:
               }
 
               for f in lst_of_users_anon_1.csv lst_of_users_anon_2.csv lst_of_users_anon_3.csv; do
-                if mc stat "local/arteci/$f" > /dev/null 2>&1; then
+                if mc stat "local/${MINIO_BUCKET}/$f" > /dev/null 2>&1; then
                   echo "[minio-init] $f already present, skipped"
                   continue
                 fi
@@ -48,7 +47,7 @@ spec:
                 if [ -n "$drive_id" ] && command -v wget > /dev/null 2>&1; then
                   echo "[minio-init] downloading $f from Google Drive..."
                   if wget -q -O "/tmp/$f" "https://drive.usercontent.google.com/download?id=${drive_id}&export=download&confirm=t"; then
-                    mc cp "/tmp/$f" "local/arteci/$f"
+                    mc cp "/tmp/$f" "local/${MINIO_BUCKET}/$f"
                     rm -f "/tmp/$f"
                     echo "[minio-init] $f uploaded from Google Drive"
                     uploaded=1
@@ -60,7 +59,7 @@ spec:
 
                 if [ "$uploaded" = "0" ]; then
                   if [ -f "/fixtures/$f" ]; then
-                    mc cp "/fixtures/$f" "local/arteci/$f"
+                    mc cp "/fixtures/$f" "local/${MINIO_BUCKET}/$f"
                     echo "[minio-init] $f uploaded from ConfigMap"
                   else
                     echo "[minio-init] WARNING: $f not found in any source"
@@ -78,6 +77,11 @@ spec:
                 secretKeyRef:
                   name: arteci-api-secret
                   key: MINIO_SECRET_KEY
+            - name: MINIO_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: arteci-api-config
+                  key: MINIO_BUCKET
           volumeMounts:
             - name: fixtures
               mountPath: /fixtures
