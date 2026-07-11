@@ -54,6 +54,38 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 
 ---
 
+## Prérequis
+
+### Option A — Sans Docker
+
+| Outil | Mac | Linux | Windows |
+|-------|-----|-------|---------|
+| Go 1.22+ | `brew install go` | [go.dev/dl](https://go.dev/dl/) | [go.dev/dl](https://go.dev/dl/) |
+| Docker (pour MinIO) | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | `apt install docker.io` | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+
+### Option B — Docker Compose
+
+| Outil | Mac | Linux | Windows |
+|-------|-----|-------|---------|
+| Docker + Compose | [Docker Desktop 4.0+](https://www.docker.com/products/docker-desktop/) | `apt install docker.io docker-compose-plugin` | [Docker Desktop](https://www.docker.com/products/docker-desktop/) — WSL2 recommandé |
+
+> Go n'est pas nécessaire — le build se fait entièrement dans Docker.
+
+### Option C — Kubernetes
+
+| Outil | Mac | Linux | Windows |
+|-------|-----|-------|---------|
+| Vagrant 2.3+ | `brew install vagrant` | [vagrantup.com](https://developer.hashicorp.com/vagrant/downloads) | [vagrantup.com](https://developer.hashicorp.com/vagrant/downloads) |
+| QEMU | `brew install qemu` | `apt install qemu-system-arm` / `qemu-system-x86` | ⚠️ non supporté (voir note) |
+| Plugin Vagrant QEMU | `vagrant plugin install vagrant-qemu` | idem | N/A |
+| kubectl | `brew install kubectl` | [k8s.io](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) | `winget install Kubernetes.kubectl` |
+
+> **Windows** : le provider QEMU n'est pas supporté nativement. Deux options :
+> - Utiliser WSL2 et lancer les commandes Vagrant depuis le terminal WSL2.
+> - Remplacer le provider QEMU par VirtualBox dans le `Vagrantfile` (supprimer le bloc `config.vm.provider "qemu"`, ajouter `config.vm.provider "virtualbox"`).
+
+---
+
 ## Démarrage rapide
 
 ### Option A — Sans Docker (Go uniquement)
@@ -165,9 +197,6 @@ Spans instrumentés :
 - `minio.getObject` — attributs : bucket, file, file_size_bytes
 - `processDate.csv` / `processDate.excel` — attributs : bucket, file, columns, total_rows, rows_failed
 - `minio.putObject` — attributs : bucket, file, duration_ms
-- HTTP in/out via middleware OTel
-
-Logs structurés avec `traceId` + `spanId` corrélés.
 
 ---
 
