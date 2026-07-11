@@ -74,10 +74,9 @@ volumes:
   signoz-clickhouse-data:
 
 networks:
-  # Réseau partagé avec arteci pour que l'API puisse envoyer les traces au collector
   arteci:
     name: arteci
     driver: bridge
-  # Réseau interne SigNoz (clickhouse, query-service, frontend)
+  # Signoz network for inter-service communication
   signoz:
     driver: bridge
