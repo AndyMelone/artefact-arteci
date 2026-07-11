@@ -1,6 +1,27 @@
 name: arteci
 
 services:
+  minio:
+    image: minio/minio:latest
+    container_name: arteci-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - arteci
+
   minio-init:
     image: minio/mc:latest
     container_name: arteci-minio-init
@@ -9,6 +30,9 @@ services:
       - ../ressources:/data/ressources:ro
       - ../fixtures:/data/fixtures:ro
       - ./scripts/minio-init.sh:/scripts/minio-init.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
     restart: on-failure
     networks:
       - arteci
@@ -28,7 +52,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: arteci
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4317
       OTEL_SERVICE_NAME: arteci-api-go
     depends_on:
       minio-init:
@@ -37,6 +61,8 @@ services:
     networks:
       - arteci
 
+volumes:
+  minio-data:
+
 networks:
   arteci:
-    external: true

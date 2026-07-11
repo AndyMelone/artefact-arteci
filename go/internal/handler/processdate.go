@@ -137,7 +137,6 @@ func ProcessDate(mc *storage.MinioClient) http.HandlerFunc {
 		observability.ProcessRowsFailed.Add(ctx, failedRows, metric.WithAttributes(attribute.String("file_type", "csv")))
 		observability.ProcessDuration.Record(ctx, durationMs, metric.WithAttributes(attribute.String("file_type", "csv")))
 
-		// fix 2 — RAM finale dans le log de completion
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
 		observability.ProcessLog.Info(ctx, "CSV date normalization completed", observability.Attrs{
@@ -224,7 +223,6 @@ func processCSV(
 						if res.MatchedFormat != "" {
 							colCache[idx] = res.MatchedFormat
 						}
-						// fix 3 — sanity check: année hors [1900-2100] = bug silencieux de hint
 						if res.WasParsed && len(res.Normalized) >= 10 {
 							yearStr := res.Normalized[6:10]
 							if y, err := strconv.Atoi(yearStr); err == nil && (y < 1900 || y > 2100) {
@@ -235,7 +233,6 @@ func processCSV(
 								failed++
 							}
 						}
-						// fix 1 — collecter un échantillon des valeurs non parsées
 						if !res.WasParsed && strings.TrimSpace(raw) != "" {
 							failed++
 							if len(failedSamples[idx]) < 5 {
@@ -278,14 +275,13 @@ func processCSV(
 		close(resultCh)
 	}()
 
-	allFailedSamples := make(map[int][]string) // fix 1 — agrégat des échantillons de toutes les goroutines
+	allFailedSamples := make(map[int][]string) 
 	pending := make(map[int]batchResult)
 	nextWrite := 0
 	var totalRows, totalFailed int64
 	preview := make([]map[string]string, 0, previewMax)
 
 	for res := range resultCh {
-		// fix 1 — agréger les échantillons de valeurs non parsées (max 5 par colonne)
 		for idx, samples := range res.failedSamples {
 			for _, s := range samples {
 				if len(allFailedSamples[idx]) < 5 {
@@ -306,7 +302,6 @@ func processCSV(
 			for _, line := range r.lines {
 				totalRows++
 				if totalRows%1_000_000 == 0 {
-					// fix 2 — RAM visible avant un éventuel OOM
 					var mem runtime.MemStats
 					runtime.ReadMemStats(&mem)
 					observability.ProcessLog.Info(ctx, "CSV normalization progress", observability.Attrs{

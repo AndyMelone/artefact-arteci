@@ -292,9 +292,6 @@ func tryGoStdDate(raw string) (time.Time, string, bool) {
 	return time.Time{}, "", false
 }
 
-// Normalize converts any supported date string to "dd-MM-yyyy HH:mm:ss".
-// hint disambiguates numeric d/m vs m/d formats.
-// cachedFormat is an optional previously matched format to skip the full chain.
 func Normalize(value string, hint Hint, _ string) Result {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
