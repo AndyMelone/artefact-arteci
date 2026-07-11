@@ -4,17 +4,17 @@ services:
   minio:
     image: minio/minio:latest
     container_name: arteci-minio
-    command: server /data --console-address ":9001"
+    command: server /data --address ":${MINIO_PORT:-9000}" --console-address ":${MINIO_CONSOLE_PORT:-9001}"
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_PORT:-9000}:${MINIO_PORT:-9000}"
+      - "${MINIO_CONSOLE_PORT:-9001}:${MINIO_CONSOLE_PORT:-9001}"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${MINIO_PORT:-9000}/minio/health/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     entrypoint: ["/bin/sh", "/scripts/minio-init.sh"]
     environment:
       MINIO_ENDPOINT: arteci-minio
-      MINIO_PORT: "9000"
+      MINIO_PORT: ${MINIO_PORT:-9000}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-arteci}
@@ -49,12 +49,12 @@ services:
       dockerfile: Dockerfile
     container_name: arteci-api-go
     ports:
-      - "${API_PORT:-3001}:3001"
+      - "${API_PORT:-3001}:${API_PORT:-3001}"
     environment:
-      PORT: "3001"
+      PORT: ${API_PORT:-3001}
       MINIO_ENDPOINT: arteci-minio
-      MINIO_PORT: "9000"
-      MINIO_USE_SSL: "false"
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-arteci}
