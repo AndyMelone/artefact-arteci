@@ -85,5 +85,6 @@ func Columns(mc *storage.MinioClient) http.HandlerFunc {
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	w.Write([]byte(`{"message":"` + msg + `"}`))
+	b, _ := json.Marshal(map[string]string{"message": msg})
+	w.Write(b)
 }

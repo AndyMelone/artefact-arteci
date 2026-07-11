@@ -112,7 +112,10 @@ func otelMiddleware(next http.Handler) http.Handler {
 		} else {
 			span.SetStatus(codes.Ok, "")
 		}
-		span.SetAttributes(attribute.Int64("http.duration_ms", durationMs))
+		span.SetAttributes(
+			attribute.Int64("http.duration_ms", durationMs),
+			attribute.Int("http.response.status_code", rw.statusCode),
+		)
 		span.End()
 
 		attrs := metric.WithAttributes(
