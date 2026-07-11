@@ -1,0 +1,58 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box      = "generic/alpine318"
+  config.vm.hostname = "k3s-master"
+
+  # Port SSH fixe pour éviter les conflits avec d'autres VMs Vagrant
+  config.ssh.port    = 52222
+
+  config.vm.provider "qemu" do |qe|
+    qe.memory = "4G"
+    qe.smp    = "4"
+    # Port forwarding via QEMU user networking
+    qe.extra_qemu_args = %w(
+      -netdev user,id=net1,hostfwd=tcp:127.0.0.1:52222-:22,hostfwd=tcp:127.0.0.1:3001-:3001,hostfwd=tcp:127.0.0.1:9000-:9000,hostfwd=tcp:127.0.0.1:9001-:9001,hostfwd=tcp:127.0.0.1:16443-:6443,hostfwd=tcp:127.0.0.1:3301-:3301
+      -device virtio-net-pci,netdev=net1
+    )
+  end
+
+  # Sync k8s manifests dans la VM (rsync one-way host → guest)
+  config.vm.synced_folder "../k8s", "/home/vagrant/k8s",
+    type:           "rsync",
+    rsync__exclude: [".git/"]
+
+  config.vm.provision "shell", inline: <<-SHELL
+    # Fix DNS (QEMU user networking DNS 10.0.2.3 ne résout pas les noms)
+    echo 'nameserver 8.8.8.8' > /etc/resolv.conf
+
+    # Dépendances minimales
+    apk update -q
+    apk add -q curl
+
+    # Installe k3s v1.32 LTS (stable sur kernel 6.1 + Alpine 3.18 ARM64)
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.32.5+k3s1" INSTALL_K3S_EXEC="--disable=traefik" sh -
+
+    # Attend que le nœud soit Ready
+    echo "Waiting for k3s to be ready..."
+    until k3s kubectl get nodes 2>/dev/null | grep -q " Ready"; do
+      sleep 3
+    done
+    echo "k3s ready."
+
+    # kubectl accessible par l'utilisateur vagrant
+    mkdir -p /home/vagrant/.kube
+    cp /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
+    chown -R vagrant:vagrant /home/vagrant/.kube
+    echo 'export KUBECONFIG=/home/vagrant/.kube/config' >> /home/vagrant/.profile
+
+    # Exporte le kubeconfig pour kubectl depuis le Mac
+    # Patche 6443 → 16443 (6443 pris par Docker Desktop sur le Mac)
+    sed 's/127.0.0.1:6443/127.0.0.1:16443/' /etc/rancher/k3s/k3s.yaml > /vagrant/kubeconfig.yaml
+    chmod 600 /vagrant/kubeconfig.yaml
+    echo ""
+    echo "==> VM ready. To use kubectl from your Mac:"
+    echo "    export KUBECONFIG=\$(pwd)/Vagrant/kubeconfig.yaml"
+  SHELL
+end

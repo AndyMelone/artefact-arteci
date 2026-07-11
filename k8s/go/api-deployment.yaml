@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arteci-api
+  namespace: arteci
+  labels:
+    app: arteci-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arteci-api
+  template:
+    metadata:
+      labels:
+        app: arteci-api
+    spec:
+      containers:
+        - name: arteci-api
+          image: melone30/arteci-api-go:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: arteci-api-config
+            - secretRef:
+                name: arteci-api-secret
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10

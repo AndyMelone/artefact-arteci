@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: arteci-api-service
+  namespace: arteci
+spec:
+  selector:
+    app: arteci-api
+  ports:
+    - port: 3001
+      targetPort: 3001
+      protocol: TCP
+  type: LoadBalancer
