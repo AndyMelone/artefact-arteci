@@ -79,6 +79,38 @@ cp .env.example .env
 
 ## Prérequis
 
+### Observabilité — SigNoz
+
+Le projet exporte traces, métriques et logs via OpenTelemetry vers **SigNoz**. Les options A et B nécessitent de configurer SigNoz avant le démarrage. Deux possibilités :
+
+#### Option 1 — SigNoz Cloud
+
+Aucune installation locale. Les données sont envoyées vers l'instance Cloud managée.
+
+1. Créer un compte sur [app.us2.signoz.cloud](https://app.us2.signoz.cloud)
+2. Récupérer la clé d'ingestion : **Settings → Ingestion Keys**
+3. Renseigner la clé dans `.env` (à la racine) :
+
+```bash
+SIGNOZ_INGESTION_KEY=<votre-clé>
+```
+
+L'API se connecte automatiquement à `ingest.us2.signoz.cloud:443` avec TLS.
+
+#### Option 2 — SigNoz self-hosted
+
+SigNoz tourne localement via Docker Compose. Aucune clé requise.
+
+```bash
+docker compose -f docker/docker-compose.signoz.yml up -d
+```
+
+SigNoz UI disponible sur `http://localhost:8080` (premier démarrage : ~2 min le temps que ClickHouse s'initialise).
+
+Laisser `SIGNOZ_INGESTION_KEY` vide dans `.env` — l'exporteur bascule automatiquement en mode non-TLS vers le collector local.
+
+---
+
 ### Option A — Sans Docker
 
 | Outil | Mac | Linux | Windows |
@@ -137,33 +169,10 @@ Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de 
 
 ### Option B — Avec Docker Compose
 
-#### Setup SigNoz (observabilité)
-
-Deux modes disponibles — choisir l'un avant de lancer la stack :
-
-**Mode Cloud** (par défaut) : les traces et logs sont envoyés vers SigNoz Cloud.
-
-```bash
-# Renseigner la clé dans .env (fournie séparément)
-echo "SIGNOZ_INGESTION_KEY=<votre-clé>" >> .env
-```
-
-**Mode self-hosted** : SigNoz tourne localement, aucune clé requise.
-
-```bash
-# Démarrer SigNoz (7 services — ClickHouse, PostgreSQL, ingester, app…)
-docker compose -f docker/docker-compose.signoz.yml up -d
-# UI disponible sur http://localhost:8080
-```
-
-> Voir la section [Observabilité](#observabilité--otel--signoz) pour savoir comment vérifier les données dans chaque mode.
-
----
-
 ```bash
 # 1. Créer le fichier de config
 cp .env.example .env
-# Renseigner SIGNOZ_INGESTION_KEY si mode Cloud
+# Renseigner SIGNOZ_INGESTION_KEY si mode Cloud (voir section SigNoz ci-dessus)
 
 # 2. Démarrer la stack
 docker compose --env-file .env -f docker/docker-compose.yml up -d --build
