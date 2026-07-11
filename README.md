@@ -118,11 +118,16 @@ Prérequis : Go 1.25+, une instance MinIO accessible.
 # 1. Créer le .env à la racine
 cp .env.example .env
 
-# 2. Démarrer MinIO en local
-docker run -d -p 9000:9000 -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin \
-  -e MINIO_ROOT_PASSWORD=minioadmin \
-  minio/minio server /data --console-address :9001
+# 2. Charger les variables et démarrer MinIO
+set -a && . .env && set +a
+docker run -d \
+  -p "${MINIO_PORT:-9000}:${MINIO_PORT:-9000}" \
+  -p "${MINIO_CONSOLE_PORT:-9001}:${MINIO_CONSOLE_PORT:-9001}" \
+  -e "MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}" \
+  -e "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}" \
+  minio/minio server /data \
+  --address ":${MINIO_PORT:-9000}" \
+  --console-address ":${MINIO_CONSOLE_PORT:-9001}"
 
 # 3. Lancer l'API depuis go/
 cd go && go run .
