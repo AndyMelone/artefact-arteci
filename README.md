@@ -54,6 +54,45 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 
 ---
 
+## Configuration
+
+Le projet contient **deux fichiers `.env.example` distincts** selon le mode de démarrage :
+
+| Fichier | Usage |
+|---------|-------|
+| `.env.example` (racine) | Docker Compose, Kubernetes, Go local |
+| `api/.env.example` | NestJS en local uniquement |
+
+### Pour Docker Compose, Kubernetes ou Go local
+
+```bash
+cp .env.example .env
+# Renseigner SIGNOZ_INGESTION_KEY (fourni séparément)
+```
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `MINIO_ROOT_USER` | `minioadmin` | Identifiant MinIO |
+| `MINIO_ROOT_PASSWORD` | `minioadmin` | Mot de passe MinIO |
+| `MINIO_PORT` | `9000` | Port API MinIO |
+| `MINIO_CONSOLE_PORT` | `9001` | Port console MinIO |
+| `MINIO_BUCKET` | `arteci` | Nom du bucket |
+| `MINIO_USE_SSL` | `false` | TLS MinIO |
+| `API_PORT` | `3001` | Port de l'API Go |
+| `OTEL_SERVICE_NAME` | `arteci-api-go` | Nom du service dans SigNoz |
+| `SIGNOZ_INGESTION_KEY` | *(requis pour Cloud)* | Clé d'authentification SigNoz Cloud |
+
+> Les valeurs par défaut s'appliquent si la variable est absente — le projet fonctionne sans `.env` (sans observabilité Cloud).
+
+### Pour NestJS en local uniquement
+
+```bash
+cp api/.env.example api/.env
+# Ajuster MINIO_ENDPOINT/PORT si nécessaire
+```
+
+---
+
 ## Prérequis
 
 ### Option A — Sans Docker
@@ -89,35 +128,57 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 
 ## Démarrage rapide
 
-### Option A — Sans Docker (Go uniquement)
+### Option A — Sans Docker
+
+#### Go
 
 Prérequis : Go 1.25+, une instance MinIO accessible.
 
 ```bash
-# 1. Démarrer MinIO en local
+# 1. Créer le .env à la racine (source de vérité Go)
+cp .env.example .env
+
+# 2. Démarrer MinIO en local
 docker run -d -p 9000:9000 -p 9001:9001 \
   -e MINIO_ROOT_USER=minioadmin \
   -e MINIO_ROOT_PASSWORD=minioadmin \
   minio/minio server /data --console-address :9001
 
-# 2. Lancer l'API Go depuis la racine du projet
-cd go
-go run .
+# 3. Lancer l'API depuis go/
+cd go && go run .
 ```
 
-L'API démarre sur `:3001`. Les variables sont configurables via `go/.env` (copier depuis `.env.example`).
+L'API charge automatiquement `.env` à la racine, puis `go/.env` en fallback.
+
+#### NestJS
+
+Prérequis : Node 20+, une instance MinIO accessible.
+
+```bash
+# 1. Créer le .env NestJS (variables différentes du .env racine)
+cp api/.env.example api/.env
+
+# 2. Démarrer MinIO en local (même commande que Go)
+docker run -d -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
+  minio/minio server /data --console-address :9001
+
+# 3. Lancer l'API depuis api/
+cd api && npm run start:dev
+```
 
 Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de `ressources/` sont uploadés s'ils sont absents.
 
 ### Option B — Avec Docker Compose
 
 ```bash
-# 1. Créer le fichier de secrets (clé fournie séparément)
-cp docker/.env.example docker/.env
-# Renseigner SIGNOZ_INGESTION_KEY dans docker/.env
+# 1. Créer le fichier de config (clé SigNoz fournie séparément)
+cp .env.example .env
+# Renseigner SIGNOZ_INGESTION_KEY dans .env
 
 # 2. Démarrer la stack
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose --env-file .env -f docker/docker-compose.yml up -d --build
 ```
 
 | Service | URL |
@@ -131,13 +192,13 @@ Les traces, logs et métriques sont automatiquement envoyés vers SigNoz Cloud. 
 Pour arrêter (volumes préservés — MinIO garde les fichiers, redémarrage quasi instantané) :
 
 ```bash
-docker compose -f docker/docker-compose.yml down
+docker compose --env-file .env -f docker/docker-compose.yml down
 ```
 
 Pour tout supprimer (volumes inclus — MinIO re-seedera au prochain démarrage) :
 
 ```bash
-docker compose -f docker/docker-compose.yml down -v
+docker compose --env-file .env -f docker/docker-compose.yml down -v
 ```
 
 #### Option B2 — SigNoz self-hosted
@@ -161,28 +222,32 @@ SigNoz UI disponible sur `http://localhost:8080`. Voir `docker/docker-compose.si
 
 ### Option C — Kubernetes (k3s via Vagrant)
 
-Prérequis : Vagrant + plugin QEMU (`vagrant plugin install vagrant-qemu`).
+Prérequis : Vagrant + plugin QEMU (`vagrant plugin install vagrant-qemu`) + `envsubst` (`brew install gettext` sur Mac, pré-installé sur Linux).
 
 ```bash
-# 1. Démarrer la VM k3s
-cd Vagrant
-vagrant up
+# 1. Créer le .env à la racine (si pas déjà fait)
+cp .env.example .env
+# Renseigner SIGNOZ_INGESTION_KEY si souhaité (optionnel en k8s — SigNoz est self-hosted)
 
-# 2. Déployer toute la stack en une commande
+# 2. Démarrer la VM k3s
+cd Vagrant && vagrant up
+
+# 3. Déployer toute la stack en une commande
 ./deploy-k8s.sh
 ```
 
 Le script `deploy-k8s.sh` :
-- Copie automatiquement le kubeconfig depuis la VM
+- Lit `.env` à la racine du projet (source de vérité unique)
+- Crée le Secret k8s depuis les variables (`MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`) — jamais committé
+- Applique les manifests via `envsubst` pour injecter les valeurs (`MINIO_PORT`, `MINIO_BUCKET`, `API_PORT`…)
 - Installe **SigNoz** via Helm (namespace `monitoring`)
-- Applique les manifests arteci dans le bon ordre
 - Attend que MinIO, le job d'init et l'API soient prêts
 
 Accès à SigNoz après déploiement :
 
 ```bash
-kubectl port-forward svc/signoz-frontend 3301:3301 -n monitoring
-# Ouvrir http://localhost:3301
+kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring
+# Ouvrir http://localhost:8080
 ```
 
 Pour arrêter la VM :
@@ -238,13 +303,39 @@ L'API exporte traces, métriques et logs structurés via OTLP gRPC.
 
 | Mode | Backend | Accès |
 |------|---------|-------|
-| Docker Compose | SigNoz Cloud (configuré) | `https://app.us2.signoz.cloud` → service `arteci-api-go` |
+| Docker Compose (par défaut) | SigNoz Cloud | `https://app.us2.signoz.cloud` |
 | Docker Compose (self-hosted) | SigNoz local | `http://localhost:8080` |
 | Kubernetes | SigNoz self-hosted (Helm) | `kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring` |
 
-**Authentification Cloud** : le header `signoz-ingestion-key` est injecté automatiquement via `OTEL_EXPORTER_OTLP_HEADERS`. Aucune configuration supplémentaire requise — les données arrivent dès le premier appel API.
+### Vérifier avec SigNoz Cloud
 
-**Mode self-hosted** : quand `OTEL_EXPORTER_OTLP_HEADERS` est vide, l'exporteur bascule automatiquement en mode non-TLS (pour les collectors locaux sans authentification).
+1. Ouvrir `https://app.us2.signoz.cloud`
+2. Aller dans **Services** → sélectionner `arteci-api-go`
+3. Envoyer quelques requêtes à l'API, puis vérifier :
+   - **Traces** : chaque appel `/processDate` ou `/columns` apparaît avec durée et spans
+   - **Logs** : onglet **Logs** → filtrer `service.name = arteci-api-go`
+   - **Metrics** : onglet **Metrics** → `http.server.request.duration`
+
+> La clé `SIGNOZ_INGESTION_KEY` doit être renseignée dans `.env` (racine). Si absente, l'API démarre mais les données ne sont pas envoyées vers Cloud.
+
+### Vérifier avec SigNoz self-hosted
+
+**Docker Compose :**
+```bash
+# Démarrer SigNoz
+docker compose -f docker/docker-compose.signoz.yml up -d
+# Ouvrir http://localhost:8080
+```
+
+**Kubernetes :**
+```bash
+kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring
+# Ouvrir http://localhost:8080
+```
+
+Même navigation : **Services** → `arteci-api-go` → Traces / Logs / Metrics.
+
+**Bascule automatique TLS** : quand `OTEL_EXPORTER_OTLP_HEADERS` est vide (self-hosted), l'exporteur bascule en mode non-TLS sans rien changer dans le code.
 
 ---
 

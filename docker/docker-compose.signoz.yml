@@ -1,6 +1,5 @@
 name: signoz
 
-# signoz crée le réseau arteci (l'API arteci le rejoint en external: true)
 networks:
   signoz:
     driver: bridge
@@ -10,7 +9,6 @@ networks:
 
 services:
 
-  # 1. ClickHouse user scripts (one-shot — télécharge histogramQuantile)
   signoz-telemetrystore-clickhouse-user-scripts:
     container_name: signoz-telemetrystore-clickhouse-user-scripts
     image: clickhouse/clickhouse-server:25.12.5
@@ -33,7 +31,7 @@ services:
     networks:
       - signoz
 
-  # 2. ClickHouse Keeper (remplace ZooKeeper)
+
   signoz-telemetrykeeper-clickhousekeeper-0:
     container_name: signoz-telemetrykeeper-clickhousekeeper-0
     image: clickhouse/clickhouse-keeper:25.12.5
@@ -53,7 +51,6 @@ services:
     networks:
       - signoz
 
-  # 3. ClickHouse Server (dépend du Keeper)
   signoz-telemetrystore-clickhouse-0-0:
     container_name: signoz-telemetrystore-clickhouse-0-0
     image: clickhouse/clickhouse-server:25.12.5
@@ -80,7 +77,6 @@ services:
     networks:
       - signoz
 
-  # 4. PostgreSQL (metadata store)
   signoz-metastore-postgres-0:
     container_name: signoz-metastore-postgres-0
     image: postgres:16
@@ -100,7 +96,7 @@ services:
     networks:
       - signoz
 
-  # 5. Schema migrator (one-shot)
+
   signoz-telemetrystore-migrator:
     container_name: signoz-telemetrystore-migrator
     image: signoz/signoz-otel-collector:latest
@@ -124,7 +120,7 @@ services:
     networks:
       - signoz
 
-  # 6. Application SigNoz (UI + backend — port 8080)
+
   signoz-signoz-0:
     container_name: signoz-signoz-0
     image: signoz/signoz:latest
@@ -150,7 +146,7 @@ services:
     networks:
       - signoz
 
-  # 7. Ingester OTel (reçoit traces/logs/metrics — ports 4317/4318)
+
   signoz-ingester:
     container_name: signoz-ingester
     image: signoz/signoz-otel-collector:latest

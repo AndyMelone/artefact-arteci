@@ -8,9 +8,9 @@ spec:
     app: minio
   ports:
     - name: api
-      port: 9000
-      targetPort: 9000
+      port: ${MINIO_PORT}
+      targetPort: ${MINIO_PORT}
     - name: console
-      port: 9001
-      targetPort: 9001
+      port: ${MINIO_CONSOLE_PORT}
+      targetPort: ${MINIO_CONSOLE_PORT}
   type: LoadBalancer

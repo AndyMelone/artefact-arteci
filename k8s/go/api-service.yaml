@@ -7,7 +7,7 @@ spec:
   selector:
     app: arteci-api
   ports:
-    - port: 3001
-      targetPort: 3001
+    - port: ${API_PORT}
+      targetPort: ${API_PORT}
       protocol: TCP
   type: LoadBalancer

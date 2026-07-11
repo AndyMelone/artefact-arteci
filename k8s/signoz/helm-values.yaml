@@ -34,7 +34,6 @@ clickhouseKeeper:
       cpu: 500m
       memory: 512Mi
 
-# ClickHouse Server
 clickhouse:
   replicaCount: 1
   persistence:
@@ -48,7 +47,7 @@ clickhouse:
       cpu: "2"
       memory: 4Gi
 
-# Application SigNoz unifiée (UI + backend)
+
 signoz:
   replicaCount: 1
   env:
@@ -65,7 +64,6 @@ signoz:
       cpu: 500m
       memory: 1Gi
 
-# Ingester OTel 
 ingester:
   replicaCount: 1
   service:

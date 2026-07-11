@@ -4,10 +4,10 @@ metadata:
   name: arteci-api-config
   namespace: arteci
 data:
-  PORT: "3001"
+  PORT: "${API_PORT}"
   MINIO_ENDPOINT: minio-service
-  MINIO_PORT: "9000"
-  MINIO_USE_SSL: "false"
-  MINIO_BUCKET: arteci
+  MINIO_PORT: "${MINIO_PORT}"
+  MINIO_USE_SSL: "${MINIO_USE_SSL}"
+  MINIO_BUCKET: "${MINIO_BUCKET}"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester.monitoring.svc.cluster.local:4317
-  OTEL_SERVICE_NAME: arteci-api-go
+  OTEL_SERVICE_NAME: "${OTEL_SERVICE_NAME}"
