@@ -14,9 +14,9 @@ import (
 
 // Google Drive file IDs — add missing IDs when files are shared.
 var driveFileIDs = map[string]string{
+	"lst_of_users_anon_1.csv": "1aSCKKbXVJasCsbGI5Igi3HSOb0KGicsH",
 	"lst_of_users_anon_2.csv": "1547HnOZWAGCE5YoweHhUuSd_1AiueqaP",
-	// "lst_of_users_anon_1.csv": "<DRIVE_FILE_ID>",
-	// "lst_of_users_anon_3.csv": "<DRIVE_FILE_ID>",
+	"lst_of_users_anon_3.csv": "1EZLd2gmayepki7fujqJIp0IgvGJ99-WF",
 }
 
 func (m *MinioClient) EnsureBucket(ctx context.Context) error {
