@@ -40,7 +40,7 @@ func main() {
 	}
 	go mc.SeedBucket(ctx,
 		[]string{"ressources", "fixtures", "../ressources", "../fixtures"},
-		[]string{"lst_of_users_anon_1.csv", "lst_of_users_anon_2.csv", "lst_of_users_anon_3.csv"},
+		[]string{"lst_of_users_anon_1.csv"},
 	)
 
 	mux := http.NewServeMux()
