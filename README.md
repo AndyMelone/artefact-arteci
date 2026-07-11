@@ -112,10 +112,6 @@ Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de 
 ### Option B — Avec Docker Compose
 
 ```bash
-# 1. Démarrer SigNoz 
-docker compose -f docker/docker-compose.signoz.yml up -d
-
-# 2. Démarrer la stack arteci
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 
@@ -123,16 +119,40 @@ docker compose -f docker/docker-compose.yml up -d --build
 |---------|-----|
 | API Go | `http://localhost:3001` |
 | MinIO Console | `http://localhost:9001` (minioadmin / minioadmin) |
-| SigNoz UI | `http://localhost:3301` |
+| SigNoz Cloud | `https://app.us2.signoz.cloud` |
 
-Les traces OTel sont visibles dans SigNoz — sélectionner le service `arteci-api-go` dans l'onglet **Services**.
+Les traces, logs et métriques sont automatiquement envoyés vers SigNoz Cloud. Sélectionner le service `arteci-api-go` dans l'onglet **Services**.
 
-Pour arrêter et tout supprimer (volumes inclus) :
+Pour arrêter (volumes préservés — MinIO garde les fichiers, redémarrage quasi instantané) :
+
+```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+Pour tout supprimer (volumes inclus — MinIO re-seedera au prochain démarrage) :
 
 ```bash
 docker compose -f docker/docker-compose.yml down -v
-docker compose -f docker/docker-compose.signoz.yml down -v
 ```
+
+#### Option B2 — SigNoz self-hosted
+
+Si tu préfères faire tourner SigNoz localement :
+
+```bash
+# 1. Démarrer SigNoz (crée le réseau arteci)
+docker compose -f docker/docker-compose.signoz.yml up -d
+
+# 2. Modifier docker/docker-compose.yml :
+#    OTEL_EXPORTER_OTLP_ENDPOINT: signoz-ingester:4317
+#    (supprimer la ligne OTEL_EXPORTER_OTLP_HEADERS)
+#    networks.arteci: external: true  name: arteci
+
+# 3. Démarrer la stack arteci
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+SigNoz UI disponible sur `http://localhost:8080`. Voir `docker/docker-compose.signoz.yml` pour l'architecture complète (7 services : ClickHouse Keeper, ClickHouse, PostgreSQL, migrator, ingester, app).
 
 ### Option C — Kubernetes (k3s via Vagrant)
 
@@ -209,12 +229,18 @@ Cellule vide ou valeur non parseable → retournée telle quelle, sans erreur.
 
 ## Observabilité — OTel → SigNoz
 
-L'API exporte traces, métriques et logs structurés via OTLP gRPC vers un OTel Collector.
+L'API exporte traces, métriques et logs structurés via OTLP gRPC.
 
-| Mode | Backend traces | URL |
-|------|---------------|-----|
-| Docker Compose | SigNoz | `http://localhost:3301` |
-| Kubernetes | SigNoz | `kubectl port-forward svc/signoz-frontend 3301:3301 -n monitoring` |
+| Mode | Backend | Accès |
+|------|---------|-------|
+| Docker Compose | SigNoz Cloud (configuré) | `https://app.us2.signoz.cloud` → service `arteci-api-go` |
+| Docker Compose (self-hosted) | SigNoz local | `http://localhost:8080` |
+| Kubernetes | SigNoz self-hosted (Helm) | `kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring` |
+
+**Authentification Cloud** : le header `signoz-ingestion-key` est injecté automatiquement via `OTEL_EXPORTER_OTLP_HEADERS`. Aucune configuration supplémentaire requise — les données arrivent dès le premier appel API.
+
+**Mode self-hosted** : quand `OTEL_EXPORTER_OTLP_HEADERS` est vide, l'exporteur bascule automatiquement en mode non-TLS (pour les collectors locaux sans authentification).
+
 ---
 
 

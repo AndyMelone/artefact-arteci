@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"os"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/credentials"
 )
 
 var Tracer trace.Tracer
@@ -55,10 +57,9 @@ func Init(ctx context.Context) func(context.Context) {
 }
 
 func initTracer(ctx context.Context, endpoint string, res *resource.Resource) *sdktrace.TracerProvider {
-	exp, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+	opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
+	opts = append(opts, tlsOpts(otlptracegrpc.WithInsecure(), otlptracegrpc.WithTLSCredentials, otlptracegrpc.WithHeaders)...)
+	exp, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] trace exporter init: %v (traces disabled)", err)
 		return nil
@@ -76,10 +77,9 @@ func initTracer(ctx context.Context, endpoint string, res *resource.Resource) *s
 }
 
 func initMeter(ctx context.Context, endpoint string, res *resource.Resource) *sdkmetric.MeterProvider {
-	exp, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(endpoint),
-		otlpmetricgrpc.WithInsecure(),
-	)
+	opts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(endpoint)}
+	opts = append(opts, tlsOpts(otlpmetricgrpc.WithInsecure(), otlpmetricgrpc.WithTLSCredentials, otlpmetricgrpc.WithHeaders)...)
+	exp, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] metric exporter init: %v (metrics disabled)", err)
 		return nil
@@ -95,10 +95,9 @@ func initMeter(ctx context.Context, endpoint string, res *resource.Resource) *sd
 }
 
 func initLogProvider(ctx context.Context, endpoint string, res *resource.Resource) *sdklog.LoggerProvider {
-	exp, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint(endpoint),
-		otlploggrpc.WithInsecure(),
-	)
+	opts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(endpoint)}
+	opts = append(opts, tlsOpts(otlploggrpc.WithInsecure(), otlploggrpc.WithTLSCredentials, otlploggrpc.WithHeaders)...)
+	exp, err := otlploggrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] log exporter init: %v (otel logs disabled)", err)
 		return nil
@@ -109,6 +108,34 @@ func initLogProvider(ctx context.Context, endpoint string, res *resource.Resourc
 	)
 	otelglobal.SetLoggerProvider(lp)
 	return lp
+}
+
+// tlsOpts returns TLS + auth header options when OTEL_EXPORTER_OTLP_HEADERS is set,
+// falling back to insecure for local/self-hosted collectors.
+func tlsOpts[T any](insecure T, withTLS func(credentials.TransportCredentials) T, withHeaders func(map[string]string) T) []T {
+	headers := parseOTLPHeaders()
+	if len(headers) == 0 {
+		return []T{insecure}
+	}
+	return []T{
+		withTLS(credentials.NewTLS(&tls.Config{})),
+		withHeaders(headers),
+	}
+}
+
+func parseOTLPHeaders() map[string]string {
+	raw := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")
+	if raw == "" {
+		return nil
+	}
+	headers := make(map[string]string)
+	for _, pair := range strings.Split(raw, ",") {
+		k, v, ok := strings.Cut(pair, "=")
+		if ok {
+			headers[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return headers
 }
 
 func cleanEndpoint(e string) string {
