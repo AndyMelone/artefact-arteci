@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -82,7 +83,16 @@ func ProcessDate(mc *storage.MinioClient) http.HandlerFunc {
 			hints[i] = dateparser.Hint(f)
 		}
 
-		ctx, span := observability.Tracer.Start(ctx, "ProcessDateService.processCsv",
+		ext := strings.ToLower(filepath.Ext(req.File))
+		isExcel := ext == ".xlsx" || ext == ".xls"
+		fileType := "csv"
+		spanName := "ProcessDateService.processCsv"
+		if isExcel {
+			fileType = "excel"
+			spanName = "ProcessDateService.processExcel"
+		}
+
+		ctx, span := observability.Tracer.Start(ctx, spanName,
 			trace.WithAttributes(
 				attribute.String("minio.bucket", req.Bucket),
 				attribute.String("minio.file", req.File),
@@ -91,27 +101,35 @@ func ProcessDate(mc *storage.MinioClient) http.HandlerFunc {
 		)
 
 		start := time.Now()
-		observability.ProcessLog.Info(ctx, "Starting CSV date normalization", observability.Attrs{
-			"method": "processCsv", "bucket": req.Bucket, "file": req.File,
+		observability.ProcessLog.Info(ctx, "Starting date normalization", observability.Attrs{
+			"method": spanName, "bucket": req.Bucket, "file": req.File,
 			"columns": strings.Join(req.DateColumns, ","),
 			"formats": strings.Join(req.DateFormats, ","),
+			"file_type": fileType,
 		})
 
-		preview, totalRows, failedRows, err := processCSV(ctx, mc, req.Bucket, req.File, req.DateColumns, hints, start)
+		var preview []map[string]string
+		var totalRows, failedRows int64
+		var err error
+		if isExcel {
+			preview, totalRows, failedRows, err = processExcel(ctx, mc, req.Bucket, req.File, req.DateColumns, hints, start)
+		} else {
+			preview, totalRows, failedRows, err = processCSV(ctx, mc, req.Bucket, req.File, req.DateColumns, hints, start)
+		}
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			span.End()
 			durationMs := time.Since(start).Milliseconds()
-			observability.ProcessLog.Error(ctx, "CSV date normalization failed", observability.Attrs{
-				"method": "processCsv", "bucket": req.Bucket, "file": req.File,
+			observability.ProcessLog.Error(ctx, "Date normalization failed", observability.Attrs{
+				"method": spanName, "bucket": req.Bucket, "file": req.File,
 				"error": err.Error(), "duration_ms": durationMs,
 			})
 			msg := err.Error()
 			switch {
 			case strings.Contains(msg, "NoSuchKey") || strings.Contains(msg, "not found"):
 				jsonError(w, msg, http.StatusNotFound)
-			case strings.Contains(msg, "column"):
+			case strings.Contains(msg, "Column") || strings.Contains(msg, "column"):
 				jsonError(w, msg, http.StatusUnprocessableEntity)
 			default:
 				jsonError(w, "internal error: "+msg, http.StatusInternalServerError)
@@ -126,21 +144,21 @@ func ProcessDate(mc *storage.MinioClient) http.HandlerFunc {
 		}
 
 		span.SetAttributes(
-			attribute.Int64("csv.total_rows", totalRows),
+			attribute.Int64("total_rows", totalRows),
 			attribute.Int64("date.rows_failed", failedRows),
 			attribute.Int("preview.count", len(preview)),
 		)
 		span.SetStatus(codes.Ok, "")
 		span.End()
 
-		observability.ProcessRowsTotal.Add(ctx, totalRows, metric.WithAttributes(attribute.String("file_type", "csv")))
-		observability.ProcessRowsFailed.Add(ctx, failedRows, metric.WithAttributes(attribute.String("file_type", "csv")))
-		observability.ProcessDuration.Record(ctx, durationMs, metric.WithAttributes(attribute.String("file_type", "csv")))
+		observability.ProcessRowsTotal.Add(ctx, totalRows, metric.WithAttributes(attribute.String("file_type", fileType)))
+		observability.ProcessRowsFailed.Add(ctx, failedRows, metric.WithAttributes(attribute.String("file_type", fileType)))
+		observability.ProcessDuration.Record(ctx, durationMs, metric.WithAttributes(attribute.String("file_type", fileType)))
 
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
-		observability.ProcessLog.Info(ctx, "CSV date normalization completed", observability.Attrs{
-			"method": "processCsv", "bucket": req.Bucket, "file": req.File,
+		observability.ProcessLog.Info(ctx, "Date normalization completed", observability.Attrs{
+			"method": spanName, "bucket": req.Bucket, "file": req.File,
 			"total_rows": totalRows, "rows_failed": failedRows,
 			"duration_ms": durationMs, "rows_per_sec": rowsPerSec,
 			"alloc_mb": int64(mem.Alloc) / 1024 / 1024,
@@ -168,7 +186,7 @@ func processCSV(
 	pr, pw := io.Pipe()
 	uploadErr := make(chan error, 1)
 	go func() {
-		uploadErr <- mc.PutObject(ctx, bucket, file, pr)
+		uploadErr <- mc.PutObject(ctx, bucket, file, pr, "text/csv")
 	}()
 
 	bw := bufio.NewWriterSize(pw, writeBufSize)

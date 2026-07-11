@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -46,15 +47,28 @@ func Columns(mc *storage.MinioClient) http.HandlerFunc {
 			jsonError(w, "file not found: "+err.Error(), http.StatusNotFound)
 			return
 		}
-		defer obj.Close()
 
-		scanner := bufio.NewScanner(obj)
-		if !scanner.Scan() {
-			span.SetStatus(codes.Error, "file is empty")
-			jsonError(w, "file is empty", http.StatusUnprocessableEntity)
-			return
+		var columns []string
+		ext := strings.ToLower(filepath.Ext(file))
+		if ext == ".xlsx" || ext == ".xls" {
+			columns, err = columnsFromExcel(obj)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				jsonError(w, "failed to read excel: "+err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+		} else {
+			defer obj.Close()
+			scanner := bufio.NewScanner(obj)
+			if !scanner.Scan() {
+				obj.Close()
+				span.SetStatus(codes.Error, "file is empty")
+				jsonError(w, "file is empty", http.StatusUnprocessableEntity)
+				return
+			}
+			columns = strings.Split(scanner.Text(), ";")
 		}
-		columns := strings.Split(scanner.Text(), ";")
 
 		span.SetAttributes(attribute.Int("columns.count", len(columns)))
 		span.SetStatus(codes.Ok, "")

@@ -95,7 +95,7 @@ func (m *MinioClient) GetObject(ctx context.Context, bucket, file string) (io.Re
 	return obj, nil
 }
 
-func (m *MinioClient) PutObject(ctx context.Context, bucket, file string, r io.Reader) error {
+func (m *MinioClient) PutObject(ctx context.Context, bucket, file string, r io.Reader, contentType string) error {
 	ctx, span := observability.Tracer.Start(ctx, "Minio.putObject",
 		trace.WithAttributes(
 			attribute.String("minio.bucket", bucket),
@@ -110,7 +110,7 @@ func (m *MinioClient) PutObject(ctx context.Context, bucket, file string, r io.R
 	t := time.Now()
 
 	_, err := m.client.PutObject(ctx, bucket, file, r, -1, minio.PutObjectOptions{
-		ContentType:      "text/csv",
+		ContentType:      contentType,
 		DisableMultipart: false,
 	})
 	if err != nil {
