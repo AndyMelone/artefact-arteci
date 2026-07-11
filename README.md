@@ -56,15 +56,6 @@ Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dan
 
 ## Configuration
 
-Le projet contient **deux fichiers `.env.example` distincts** selon le mode de démarrage :
-
-| Fichier | Usage |
-|---------|-------|
-| `.env.example` (racine) | Docker Compose, Kubernetes, Go local |
-| `api/.env.example` | NestJS en local uniquement |
-
-### Pour Docker Compose, Kubernetes ou Go local
-
 ```bash
 cp .env.example .env
 # Renseigner SIGNOZ_INGESTION_KEY (fourni séparément)
@@ -84,13 +75,6 @@ cp .env.example .env
 
 > Les valeurs par défaut s'appliquent si la variable est absente — le projet fonctionne sans `.env` (sans observabilité Cloud).
 
-### Pour NestJS en local uniquement
-
-```bash
-cp api/.env.example api/.env
-# Ajuster MINIO_ENDPOINT/PORT si nécessaire
-```
-
 ---
 
 ## Prérequis
@@ -107,8 +91,6 @@ cp api/.env.example api/.env
 | Outil | Mac | Linux | Windows |
 |-------|-----|-------|---------|
 | Docker + Compose | [Docker Desktop 4.0+](https://www.docker.com/products/docker-desktop/) | `apt install docker.io docker-compose-plugin` | [Docker Desktop](https://www.docker.com/products/docker-desktop/) — WSL2 recommandé |
-
-> Go n'est pas nécessaire — le build se fait entièrement dans Docker.
 
 ### Option C — Kubernetes
 
@@ -130,12 +112,10 @@ cp api/.env.example api/.env
 
 ### Option A — Sans Docker
 
-#### Go
-
 Prérequis : Go 1.25+, une instance MinIO accessible.
 
 ```bash
-# 1. Créer le .env à la racine (source de vérité Go)
+# 1. Créer le .env à la racine
 cp .env.example .env
 
 # 2. Démarrer MinIO en local
@@ -150,32 +130,37 @@ cd go && go run .
 
 L'API charge automatiquement `.env` à la racine, puis `go/.env` en fallback.
 
-#### NestJS
-
-Prérequis : Node 20+, une instance MinIO accessible.
-
-```bash
-# 1. Créer le .env NestJS (variables différentes du .env racine)
-cp api/.env.example api/.env
-
-# 2. Démarrer MinIO en local (même commande que Go)
-docker run -d -p 9000:9000 -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin \
-  -e MINIO_ROOT_PASSWORD=minioadmin \
-  minio/minio server /data --console-address :9001
-
-# 3. Lancer l'API depuis api/
-cd api && npm run start:dev
-```
-
 Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de `ressources/` sont uploadés s'ils sont absents.
 
 ### Option B — Avec Docker Compose
 
+#### Setup SigNoz (observabilité)
+
+Deux modes disponibles — choisir l'un avant de lancer la stack :
+
+**Mode Cloud** (par défaut) : les traces et logs sont envoyés vers SigNoz Cloud.
+
 ```bash
-# 1. Créer le fichier de config (clé SigNoz fournie séparément)
+# Renseigner la clé dans .env (fournie séparément)
+echo "SIGNOZ_INGESTION_KEY=<votre-clé>" >> .env
+```
+
+**Mode self-hosted** : SigNoz tourne localement, aucune clé requise.
+
+```bash
+# Démarrer SigNoz (7 services — ClickHouse, PostgreSQL, ingester, app…)
+docker compose -f docker/docker-compose.signoz.yml up -d
+# UI disponible sur http://localhost:8080
+```
+
+> Voir la section [Observabilité](#observabilité--otel--signoz) pour savoir comment vérifier les données dans chaque mode.
+
+---
+
+```bash
+# 1. Créer le fichier de config
 cp .env.example .env
-# Renseigner SIGNOZ_INGESTION_KEY dans .env
+# Renseigner SIGNOZ_INGESTION_KEY si mode Cloud
 
 # 2. Démarrer la stack
 docker compose --env-file .env -f docker/docker-compose.yml up -d --build
@@ -332,10 +317,6 @@ docker compose -f docker/docker-compose.signoz.yml up -d
 kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring
 # Ouvrir http://localhost:8080
 ```
-
-Même navigation : **Services** → `arteci-api-go` → Traces / Logs / Metrics.
-
-**Bascule automatique TLS** : quand `OTEL_EXPORTER_OTLP_HEADERS` est vide (self-hosted), l'exporteur bascule en mode non-TLS sans rien changer dans le code.
 
 ---
 
