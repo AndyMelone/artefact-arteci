@@ -49,6 +49,7 @@ func main() {
 	})
 	mux.HandleFunc("GET /columns", handler.Columns(mc))
 	mux.HandleFunc("POST /processDate", handler.ProcessDate(mc))
+	mux.Handle("/", http.FileServer(http.Dir("../ui")))
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -57,7 +58,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: otelMiddleware(mux),
+		Handler: corsMiddleware(otelMiddleware(mux)),
 	}
 
 	log.Printf("Go API listening on :%s", port)
@@ -74,6 +75,19 @@ func main() {
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
 	shutdown(shutCtx)
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 type responseWriter struct {

@@ -165,7 +165,10 @@ func ProcessDate(mc *storage.MinioClient) http.HandlerFunc {
 		})
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(preview)
+		json.NewEncoder(w).Encode(map[string]any{
+			"rows":       preview,
+			"total_rows": totalRows,
+		})
 	}
 }
 

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARTECI — Démo API</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div id="accent-bar"></div>
+
+  <header>
+    <div class="header-inner">
+      <div class="logo-mark">A</div>
+      <div class="header-titles">
+        <div class="header-title">ARTECI</div>
+        <div class="header-subtitle">démo API — normalisation de dates CSV / Excel</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Step indicator -->
+    <div class="steps">
+      <div class="step">
+        <div class="step-circle" id="step-circle-1">1</div>
+        <div class="step-label" id="step-label-1">Source</div>
+      </div>
+      <div class="step-connector" id="connector-1"></div>
+      <div class="step">
+        <div class="step-circle" id="step-circle-2">2</div>
+        <div class="step-label" id="step-label-2">Colonnes &amp; dates</div>
+      </div>
+      <div class="step-connector" id="connector-2"></div>
+      <div class="step">
+        <div class="step-circle" id="step-circle-3">3</div>
+        <div class="step-label" id="step-label-3">Résultat</div>
+      </div>
+    </div>
+
+    <!-- Source card -->
+    <div class="card" id="source-card">
+      <div class="row-label">
+        <div class="dot accent-dot"></div>
+        <span class="label-text">Source</span>
+      </div>
+
+      <div class="inputs-row">
+        <div class="input-group" style="flex:1; min-width:220px;">
+          <label class="input-label" for="bucket-input">Bucket</label>
+          <input type="text" id="bucket-input" class="text-input mono" placeholder="ex: arteci" value="arteci">
+        </div>
+        <div class="input-group" style="flex:2; min-width:280px;">
+          <label class="input-label" for="file-input">Fichier</label>
+          <input type="text" id="file-input" class="text-input mono" placeholder="ex: exports/2026-06/clients.csv">
+        </div>
+        <button id="load-btn" class="btn-primary">Charger les colonnes</button>
+      </div>
+
+      <!-- Columns error -->
+      <div id="columns-error" class="error-banner" style="display:none;">
+        <div class="error-badge">!</div>
+        <div id="columns-error-text" class="error-text"></div>
+      </div>
+
+      <!-- Columns block -->
+      <div id="columns-block" style="display:none;">
+        <div class="columns-header">
+          <div class="dot accent-dot"></div>
+          <span class="label-text">Colonnes détectées</span>
+          <div id="columns-count-badge" class="count-badge">0</div>
+        </div>
+        <div class="columns-helper">
+          Coche les colonnes qui contiennent des dates, et choisis leur format d'origine.
+        </div>
+        <div id="columns-list" class="columns-list"></div>
+        <div class="process-row">
+          <button id="process-btn" class="btn-primary">Traiter →</button>
+          <div id="date-col-count-text" class="helper-text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">
+        <div class="empty-icon-inner"></div>
+      </div>
+      <div class="empty-text">
+        Renseigne un bucket et un fichier, puis charge les colonnes pour commencer.
+      </div>
+    </div>
+
+    <!-- Processing state -->
+    <div id="processing-state" class="card processing-card" style="display:none;">
+      <div class="ring-container">
+        <div class="ring ring-1"></div>
+        <div class="ring ring-2"></div>
+        <div class="ring-dot"></div>
+      </div>
+      <div class="processing-title">Traitement en cours</div>
+      <div class="processing-subtitle">
+        Les fichiers volumineux (jusqu'à ~900 Mo) peuvent prendre plusieurs minutes.
+        Aucune progression chiffrée n'est disponible côté serveur — c'est normal.
+      </div>
+      <div class="scan-track">
+        <div class="scan-bar"></div>
+      </div>
+      <div id="status-message" class="status-message">Lecture du fichier…</div>
+      <div id="elapsed-timer" class="elapsed-timer">00:00</div>
+    </div>
+
+    <!-- Process error -->
+    <div id="process-error" class="process-error-card" style="display:none;">
+      <div class="process-error-header">
+        <div class="error-badge large">!</div>
+        <div class="process-error-title">Échec du traitement</div>
+      </div>
+      <div id="process-error-text" class="error-text"></div>
+    </div>
+
+    <!-- Results -->
+    <div id="results-card" class="card results-card" style="display:none;">
+      <div class="results-header">
+        <div class="dot success-dot"></div>
+        <span class="label-text">Résultat</span>
+        <div id="result-summary" class="result-summary"></div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead id="results-thead"></thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
