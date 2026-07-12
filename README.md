@@ -2,6 +2,22 @@
 
 API haute performance pour normaliser des colonnes de dates dans des fichiers CSV/Excel stockés dans MinIO.
 
+## Démo UI
+
+Une interface web minimaliste est intégrée à l'API Go et accessible directement depuis le navigateur.
+
+| Mode | URL |
+|------|-----|
+| Local / Docker Compose / Kubernetes | `http://localhost:3001` |
+
+Fonctionnalités :
+- Saisie du bucket et du fichier + chargement des colonnes (`GET /columns`)
+- Sélection des colonnes de dates avec format DMY/MDY par colonne
+- Lancement du traitement (`POST /processDate`) avec indicateur de progression et timer
+- Tableau des 100 premières lignes avec colonnes de dates surlignées, durée et nombre total de lignes
+
+---
+
 ## Endpoints
 
 | Méthode | Route | Description |
@@ -180,7 +196,7 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d --build
 
 | Service | URL |
 |---------|-----|
-| API Go | `http://localhost:3001` |
+| API Go + Démo UI | `http://localhost:3001` |
 | MinIO Console | `http://localhost:9001` (minioadmin / minioadmin) |
 | SigNoz Cloud | `https://app.us2.signoz.cloud` |
 

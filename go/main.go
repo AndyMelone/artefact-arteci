@@ -49,7 +49,11 @@ func main() {
 	})
 	mux.HandleFunc("GET /columns", handler.Columns(mc))
 	mux.HandleFunc("POST /processDate", handler.ProcessDate(mc))
-	mux.Handle("/", http.FileServer(http.Dir("../ui")))
+	uiDir := os.Getenv("UI_DIR")
+	if uiDir == "" {
+		uiDir = "../ui"
+	}
+	mux.Handle("/", http.FileServer(http.Dir(uiDir)))
 
 	port := os.Getenv("PORT")
 	if port == "" {
