@@ -5,6 +5,7 @@ metadata:
   namespace: arteci
 data:
   PORT: "${API_PORT}"
+  UI_DIR: /ui
   MINIO_ENDPOINT: minio-service
   MINIO_PORT: "${MINIO_PORT}"
   MINIO_USE_SSL: "${MINIO_USE_SSL}"
