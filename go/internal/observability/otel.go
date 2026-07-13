@@ -26,7 +26,14 @@ import (
 var Tracer trace.Tracer
 
 func Init(ctx context.Context) func(context.Context) {
-	endpoint := cleanEndpoint(getEnvOr("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"))
+	rawEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if rawEndpoint == "" {
+		log.Println("[otel] OTEL_EXPORTER_OTLP_ENDPOINT not set — observability disabled")
+		Tracer = otel.GetTracerProvider().Tracer("arteci-api")
+		return func(context.Context) {}
+	}
+
+	endpoint := cleanEndpoint(rawEndpoint)
 	name := getEnvOr("OTEL_SERVICE_NAME", "arteci-api-go")
 
 	res, _ := resource.New(ctx,
