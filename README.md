@@ -109,6 +109,11 @@ Le projet utilise **deux fichiers `.env`** selon le mode de lancement :
 | `MINIO_BUCKET` | `arteci` | Nom du bucket |
 | `API_PORT` | `3001` | Port de l'API Go |
 | `SIGNOZ_INGESTION_KEY` | *(requis pour Cloud)* | Clé d'authentification SigNoz Cloud |
+| `SIGNOZ_POSTGRES_PASSWORD` | `signoz` | Mot de passe Postgres du chart Helm SigNoz (k8s uniquement) |
+| `SIGNOZ_JWT_SECRET` | *(à définir)* | Secret JWT du serveur SigNoz (k8s uniquement) |
+| `SIGNOZ_ROOT_EMAIL` | `admin@arteci.local` | Email du compte admin auto-provisionné (k8s uniquement) |
+| `SIGNOZ_ROOT_PASSWORD` | *(à définir)* | Mot de passe admin — ≥12 car., 1 maj., 1 min., 1 chiffre, 1 symbole (k8s uniquement) |
+| `SIGNOZ_ROOT_ORG_NAME` | `arteci` | Nom de l'organisation auto-provisionnée (k8s uniquement) |
 
 **`go/.env`** — Variables API Go locale (Option A) :
 
@@ -399,7 +404,7 @@ kubectl port-forward svc/signoz 8080:8080 -n monitoring
 # Ouvrir http://localhost:8080
 ```
 
-> **Limite connue (Kubernetes)** : sans compte admin/org créé, le protocole OpAMP ne peut pousser sa config au collecteur, qui ne démarre pas son récepteur OTLP (port 4317) — les traces/logs/métriques ne sont donc pas reçus tant qu'aucun compte n'a été créé une fois via l'UI (`http://localhost:8080` après le port-forward ci-dessus). `SIGNOZ_TOKENIZER_JWT_SECRET` (`helm-values.yaml`) évite le crash-loop du pod `signoz-0` mais ne crée pas de compte à lui seul — l'API et le traitement des fichiers (`/health`, `/columns`, `/processDate`) fonctionnent normalement, indépendamment de ce blocage.
+> **Kubernetes — compte SigNoz** : `deploy-k8s.sh` auto-provisionne le compte admin (`SIGNOZ_ROOT_EMAIL`/`SIGNOZ_ROOT_PASSWORD` dans `.env`) au démarrage de `signoz-0`, sans quoi le protocole OpAMP ne peut jamais enregistrer le collecteur et son récepteur OTLP (port 4317) ne démarre pas.
 
 ---
 
