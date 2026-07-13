@@ -218,12 +218,11 @@ L'API charge automatiquement `go/.env`, puis `.env` (racine) en fallback.
 
 Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de `ressources/` sont uploadés s'ils sont absents.
 
-### Option B1 — Avec Docker Compose (SigNoz Cloud)
+### Option B — Avec Docker Compose
 
 ```bash
 # 1. Créer le fichier de config à la racine
 cp .env.example .env
-# Renseigner SIGNOZ_INGESTION_KEY si mode Cloud (voir section SigNoz ci-dessus)
 
 # 2. Démarrer la stack
 docker compose --env-file .env -f docker/docker-compose.yml up -d --build
@@ -233,9 +232,6 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d --build
 |---------|-----|
 | API Go + Démo UI | `http://localhost:3001` |
 | MinIO Console | `http://localhost:9001` (minioadmin / minioadmin) |
-| SigNoz Cloud | `https://app.us2.signoz.cloud` |
-
-Les traces, logs et métriques sont automatiquement envoyés vers SigNoz Cloud. Sélectionner le service `arteci-api-go` dans l'onglet **Services**.
 
 Pour arrêter (volumes préservés — MinIO garde les fichiers, redémarrage quasi instantané) :
 
@@ -248,6 +244,16 @@ Pour tout supprimer (volumes inclus — MinIO re-seedera au prochain démarrage)
 ```bash
 docker compose --env-file .env -f docker/docker-compose.yml down -v
 ```
+
+#### Option B1 — SigNoz Cloud
+
+Renseigner `SIGNOZ_INGESTION_KEY` dans `.env` (racine) avant de démarrer la stack :
+
+```bash
+SIGNOZ_INGESTION_KEY=<clé-reçue-via-doppler>
+```
+
+Les traces, logs et métriques sont automatiquement envoyés vers `https://app.us2.signoz.cloud`. Sélectionner le service `arteci-api-go` dans l'onglet **Services**.
 
 #### Option B2 — SigNoz self-hosted
 
