@@ -40,7 +40,7 @@ drive_download() {
     "https://drive.usercontent.google.com/download?id=${file_id}&export=download&confirm=t"
 }
 
-for f in lst_of_users_anon_1.csv; do
+for f in lst_of_users_anon_1.csv lst_of_users_anon_1.xlsx; do
   if mc stat "local/$BUCKET/$f" > /dev/null 2>&1; then
     echo "[minio-init] $f already present, skipped"
     continue

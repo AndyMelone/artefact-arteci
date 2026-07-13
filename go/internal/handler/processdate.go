@@ -206,7 +206,7 @@ func processCSV(
 		<-uploadErr
 		return nil, 0, 0, fmt.Errorf("empty file")
 	}
-	headerLine := scanner.Text()
+	headerLine := strings.TrimPrefix(scanner.Text(), "\uFEFF")
 	headers := strings.Split(headerLine, ";")
 	headerIdx := make(map[string]int, len(headers))
 	for i, h := range headers {
