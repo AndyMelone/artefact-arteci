@@ -233,6 +233,18 @@ docker compose -f docker/docker-compose.yml up -d --build
 
 SigNoz UI disponible sur `http://localhost:8080`. Voir `docker/docker-compose.signoz.yml` pour l'architecture complète (7 services : ClickHouse Keeper, ClickHouse, PostgreSQL, migrator, ingester, app).
 
+Pour arrêter SigNoz (volumes préservés — ClickHouse garde les traces, redémarrage quasi instantané) :
+
+```bash
+docker compose -f docker/docker-compose.signoz.yml down
+```
+
+Pour tout supprimer (volumes inclus — ClickHouse, PostgreSQL effacés, reparti de zéro) :
+
+```bash
+docker compose -f docker/docker-compose.signoz.yml down -v
+```
+
 ### Option C — Kubernetes (k3s via Vagrant)
 
 Prérequis : Vagrant + plugin QEMU (`vagrant plugin install vagrant-qemu`) + `envsubst` (`brew install gettext` sur Mac, pré-installé sur Linux).
