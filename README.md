@@ -399,7 +399,7 @@ kubectl port-forward svc/signoz 8080:8080 -n monitoring
 # Ouvrir http://localhost:8080
 ```
 
-> **Limite connue (Kubernetes)** : le chart Helm déploie l'édition Enterprise de SigNoz, dont l'auto-inscription est désactivée par défaut. Sans compte admin/org créé, le protocole OpAMP ne peut pousser sa config au collecteur, qui ne démarre pas son récepteur OTLP (port 4317) — les traces/logs/métriques ne sont donc pas reçus tant qu'aucun compte n'a été créé via l'UI (`http://localhost:8080` après le port-forward ci-dessus). L'API et le traitement des fichiers (`/health`, `/columns`, `/processDate`) fonctionnent normalement, indépendamment de ce blocage.
+> **Limite connue (Kubernetes)** : sans compte admin/org créé, le protocole OpAMP ne peut pousser sa config au collecteur, qui ne démarre pas son récepteur OTLP (port 4317) — les traces/logs/métriques ne sont donc pas reçus tant qu'aucun compte n'a été créé une fois via l'UI (`http://localhost:8080` après le port-forward ci-dessus). `SIGNOZ_TOKENIZER_JWT_SECRET` (`helm-values.yaml`) évite le crash-loop du pod `signoz-0` mais ne crée pas de compte à lui seul — l'API et le traitement des fichiers (`/health`, `/columns`, `/processDate`) fonctionnent normalement, indépendamment de ce blocage.
 
 ---
 

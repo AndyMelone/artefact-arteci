@@ -52,6 +52,7 @@ signoz:
   replicaCount: 1
   env:
     TELEMETRY_ENABLED: "false"
+    SIGNOZ_TOKENIZER_JWT_SECRET: "arteci-signoz-local-secret-key-32chars"
   service:
     type: ClusterIP
     port: 8080
