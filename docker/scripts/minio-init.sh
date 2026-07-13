@@ -24,13 +24,17 @@ done
 mc mb --ignore-existing "local/$BUCKET"
 echo "[minio-init] bucket '$BUCKET' prêt"
 
+# Single source of truth for Google Drive IDs — go/internal/storage/drive-ids.env,
+# also embedded into the Go binary and mounted into the k8s minio-init job.
+# Pure shell (no grep — not present in minio/mc's base image).
 get_drive_id() {
-  case "$1" in
-    lst_of_users_anon_1.csv) echo "1aSCKKbXVJasCsbGI5Igi3HSOb0KGicsH" ;;
-    lst_of_users_anon_2.csv) echo "1547HnOZWAGCE5YoweHhUuSd_1AiueqaP" ;;
-    lst_of_users_anon_3.csv) echo "1EZLd2gmayepki7fujqJIp0IgvGJ99-WF" ;;
-    *) echo "" ;;
-  esac
+  [ -f /data/drive-ids.env ] || return
+  while IFS='=' read -r name id; do
+    if [ "$name" = "$1" ]; then
+      echo "$id"
+      return
+    fi
+  done < /data/drive-ids.env
 }
 
 drive_download() {

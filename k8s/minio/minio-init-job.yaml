@@ -33,13 +33,18 @@ spec:
               mc mb --ignore-existing "local/${MINIO_BUCKET}"
               echo "[minio-init] bucket '${MINIO_BUCKET}' ready"
 
+              # Single source of truth for Google Drive IDs —
+              # go/internal/storage/drive-ids.env, also embedded into the Go
+              # binary and mounted into Docker Compose's minio-init.
+              # Pure shell (no grep — not present in minio/mc's base image).
               get_drive_id() {
-                case "$1" in
-                  lst_of_users_anon_1.csv) echo "1aSCKKbXVJasCsbGI5Igi3HSOb0KGicsH" ;;
-                  lst_of_users_anon_2.csv) echo "1547HnOZWAGCE5YoweHhUuSd_1AiueqaP" ;;
-                  lst_of_users_anon_3.csv) echo "1EZLd2gmayepki7fujqJIp0IgvGJ99-WF" ;;
-                  *) echo "" ;;
-                esac
+                [ -f /host-drive-ids/drive-ids.env ] || return
+                while IFS='=' read -r name id; do
+                  if [ "$name" = "$1" ]; then
+                    echo "$id"
+                    return
+                  fi
+                done < /host-drive-ids/drive-ids.env
               }
 
               for f in lst_of_users_anon_1.csv; do
@@ -110,6 +115,9 @@ spec:
             - name: ressources
               mountPath: /host-ressources
               readOnly: true
+            - name: drive-ids
+              mountPath: /host-drive-ids
+              readOnly: true
       volumes:
         - name: fixtures
           configMap:
@@ -117,4 +125,8 @@ spec:
         - name: ressources
           hostPath:
             path: /home/vagrant/ressources
+            type: DirectoryOrCreate
+        - name: drive-ids
+          hostPath:
+            path: /home/vagrant/drive-ids-src
             type: DirectoryOrCreate

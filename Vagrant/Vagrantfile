@@ -31,6 +31,14 @@ Vagrant.configure("2") do |config|
     type:           "rsync",
     rsync__exclude: [".git/"]
 
+  # Single source of truth for Google Drive file IDs (also embedded into
+  # the Go binary and mounted into Docker Compose's minio-init) — synced
+  # in so the k8s minio-init Job reads the same file instead of a fourth
+  # hardcoded copy.
+  config.vm.synced_folder "../go/internal/storage", "/home/vagrant/drive-ids-src",
+    type:           "rsync",
+    rsync__exclude: [".git/"]
+
   config.vm.provision "shell", inline: <<-SHELL
     echo 'nameserver 8.8.8.8' > /etc/resolv.conf
 

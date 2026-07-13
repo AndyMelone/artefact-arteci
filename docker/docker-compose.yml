@@ -35,6 +35,7 @@ services:
     volumes:
       - ../ressources:/data/ressources:ro
       - ../fixtures:/data/fixtures:ro
+      - ../go/internal/storage/drive-ids.env:/data/drive-ids.env:ro
       - ./scripts/minio-init.sh:/scripts/minio-init.sh:ro
     depends_on:
       minio:

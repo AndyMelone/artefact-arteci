@@ -2,21 +2,41 @@ package storage
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 
 	"arteci-go/internal/observability"
 )
 
-// Google Drive file IDs — add missing IDs when files are shared.
-var driveFileIDs = map[string]string{
-	"lst_of_users_anon_1.csv": "1aSCKKbXVJasCsbGI5Igi3HSOb0KGicsH",
-	"lst_of_users_anon_2.csv": "1547HnOZWAGCE5YoweHhUuSd_1AiueqaP",
-	"lst_of_users_anon_3.csv": "1EZLd2gmayepki7fujqJIp0IgvGJ99-WF",
+// driveIDsRaw is the single source of truth for Google Drive file IDs,
+// shared with docker/scripts/minio-init.sh and k8s/minio/minio-init-job.yaml
+// (both read the same file, synced/mounted from this same path) — add
+// missing IDs there when files are shared, not as a fourth hardcoded copy.
+//
+//go:embed drive-ids.env
+var driveIDsRaw string
+
+var driveFileIDs = parseDriveIDs(driveIDsRaw)
+
+func parseDriveIDs(raw string) map[string]string {
+	ids := make(map[string]string)
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, id, ok := strings.Cut(line, "=")
+		if ok {
+			ids[name] = id
+		}
+	}
+	return ids
 }
 
 func (m *MinioClient) EnsureBucket(ctx context.Context) error {
