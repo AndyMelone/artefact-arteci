@@ -34,6 +34,7 @@ func Init(ctx context.Context) func(context.Context) {
 	}
 
 	endpoint := cleanEndpoint(rawEndpoint)
+	useTLS := isTLSEndpoint(rawEndpoint)
 	name := getEnvOr("OTEL_SERVICE_NAME", "arteci-api-go")
 
 	res, _ := resource.New(ctx,
@@ -44,9 +45,9 @@ func Init(ctx context.Context) func(context.Context) {
 		resource.WithTelemetrySDK(),
 	)
 
-	tp := initTracer(ctx, endpoint, res)
-	mp := initMeter(ctx, endpoint, res)
-	lp := initLogProvider(ctx, endpoint, res)
+	tp := initTracer(ctx, endpoint, useTLS, res)
+	mp := initMeter(ctx, endpoint, useTLS, res)
+	lp := initLogProvider(ctx, endpoint, useTLS, res)
 
 	Tracer = otel.GetTracerProvider().Tracer("arteci-api")
 
@@ -63,9 +64,9 @@ func Init(ctx context.Context) func(context.Context) {
 	}
 }
 
-func initTracer(ctx context.Context, endpoint string, res *resource.Resource) *sdktrace.TracerProvider {
+func initTracer(ctx context.Context, endpoint string, useTLS bool, res *resource.Resource) *sdktrace.TracerProvider {
 	opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-	opts = append(opts, tlsOpts(otlptracegrpc.WithInsecure(), otlptracegrpc.WithTLSCredentials, otlptracegrpc.WithHeaders)...)
+	opts = append(opts, tlsOpts(useTLS, otlptracegrpc.WithInsecure(), otlptracegrpc.WithTLSCredentials, otlptracegrpc.WithHeaders)...)
 	exp, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] trace exporter init: %v (traces disabled)", err)
@@ -83,9 +84,9 @@ func initTracer(ctx context.Context, endpoint string, res *resource.Resource) *s
 	return tp
 }
 
-func initMeter(ctx context.Context, endpoint string, res *resource.Resource) *sdkmetric.MeterProvider {
+func initMeter(ctx context.Context, endpoint string, useTLS bool, res *resource.Resource) *sdkmetric.MeterProvider {
 	opts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(endpoint)}
-	opts = append(opts, tlsOpts(otlpmetricgrpc.WithInsecure(), otlpmetricgrpc.WithTLSCredentials, otlpmetricgrpc.WithHeaders)...)
+	opts = append(opts, tlsOpts(useTLS, otlpmetricgrpc.WithInsecure(), otlpmetricgrpc.WithTLSCredentials, otlpmetricgrpc.WithHeaders)...)
 	exp, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] metric exporter init: %v (metrics disabled)", err)
@@ -101,9 +102,9 @@ func initMeter(ctx context.Context, endpoint string, res *resource.Resource) *sd
 	return mp
 }
 
-func initLogProvider(ctx context.Context, endpoint string, res *resource.Resource) *sdklog.LoggerProvider {
+func initLogProvider(ctx context.Context, endpoint string, useTLS bool, res *resource.Resource) *sdklog.LoggerProvider {
 	opts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(endpoint)}
-	opts = append(opts, tlsOpts(otlploggrpc.WithInsecure(), otlploggrpc.WithTLSCredentials, otlploggrpc.WithHeaders)...)
+	opts = append(opts, tlsOpts(useTLS, otlploggrpc.WithInsecure(), otlploggrpc.WithTLSCredentials, otlploggrpc.WithHeaders)...)
 	exp, err := otlploggrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] log exporter init: %v (otel logs disabled)", err)
@@ -117,16 +118,33 @@ func initLogProvider(ctx context.Context, endpoint string, res *resource.Resourc
 	return lp
 }
 
-// tlsOpts returns TLS + auth header options when OTEL_EXPORTER_OTLP_HEADERS is set,
-// falling back to insecure for local/self-hosted collectors.
-func tlsOpts[T any](insecure T, withTLS func(credentials.TransportCredentials) T, withHeaders func(map[string]string) T) []T {
-	headers := parseOTLPHeaders()
-	if len(headers) == 0 {
-		return []T{insecure}
+// tlsOpts picks TLS vs. insecure transport from the endpoint itself (useTLS),
+// and attaches auth headers independently — a self-hosted collector reached
+// over plain gRPC can still carry a SIGNOZ_INGESTION_KEY (or none at all).
+func tlsOpts[T any](useTLS bool, insecure T, withTLS func(credentials.TransportCredentials) T, withHeaders func(map[string]string) T) []T {
+	var opts []T
+	if useTLS {
+		opts = append(opts, withTLS(credentials.NewTLS(&tls.Config{})))
+	} else {
+		opts = append(opts, insecure)
 	}
-	return []T{
-		withTLS(credentials.NewTLS(&tls.Config{})),
-		withHeaders(headers),
+	if headers := parseOTLPHeaders(); len(headers) > 0 {
+		opts = append(opts, withHeaders(headers))
+	}
+	return opts
+}
+
+// isTLSEndpoint decides TLS from the endpoint's own scheme. Without an
+// explicit scheme (the common case — e.g. "ingest.us2.signoz.cloud:443" or
+// "signoz-ingester:4317"), fall back to the well-known TLS port 443.
+func isTLSEndpoint(raw string) bool {
+	switch {
+	case strings.HasPrefix(raw, "https://"):
+		return true
+	case strings.HasPrefix(raw, "http://"):
+		return false
+	default:
+		return strings.HasSuffix(raw, ":443")
 	}
 }
 
