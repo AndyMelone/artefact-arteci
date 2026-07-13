@@ -27,10 +27,10 @@ export API_PORT MINIO_PORT MINIO_CONSOLE_PORT MINIO_USE_SSL MINIO_BUCKET OTEL_SE
 
 export KUBECONFIG="$SCRIPT_DIR/kubeconfig.yaml"
 
-if [ ! -f "$KUBECONFIG" ]; then
-  echo "kubeconfig not found — copying from VM..."
-  vagrant -C "$SCRIPT_DIR" ssh -c "cat /home/vagrant/kubeconfig.yaml" > "$KUBECONFIG"
-fi
+# Always fetch fresh kubeconfig: vagrant up regenerates the k3s CA each time,
+# so a stale kubeconfig causes "certificate signed by unknown authority" errors.
+echo "Fetching kubeconfig from VM..."
+vagrant -C "$SCRIPT_DIR" ssh -c "cat /home/vagrant/kubeconfig.yaml" > "$KUBECONFIG" 2>/dev/null
 
 echo "==> Installing SigNoz (observability stack)..."
 kubectl apply -f "$K8S/signoz/namespace.yaml"
