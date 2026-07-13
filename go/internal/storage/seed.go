@@ -71,10 +71,10 @@ func (m *MinioClient) SeedBucket(ctx context.Context, searchDirs []string, files
 			continue
 		}
 
-		if m.seedFromDrive(ctx, f) {
+		if m.seedFromLocal(ctx, f, searchDirs) {
 			continue
 		}
-		if m.seedFromLocal(ctx, f, searchDirs) {
+		if m.seedFromDrive(ctx, f) {
 			continue
 		}
 		observability.MinioLog.Warn(ctx, "Seed: file not found in any source — upload manually if needed", observability.Attrs{
