@@ -30,7 +30,11 @@ export KUBECONFIG="$SCRIPT_DIR/kubeconfig.yaml"
 # Always fetch fresh kubeconfig: vagrant up regenerates the k3s CA each time,
 # so a stale kubeconfig causes "certificate signed by unknown authority" errors.
 echo "Fetching kubeconfig from VM..."
-vagrant -C "$SCRIPT_DIR" ssh -c "cat /home/vagrant/kubeconfig.yaml" > "$KUBECONFIG" 2>/dev/null
+VAGRANT_CWD="$SCRIPT_DIR" vagrant ssh -c "cat /home/vagrant/kubeconfig.yaml" > "$KUBECONFIG"
+if ! grep -q "apiVersion" "$KUBECONFIG" 2>/dev/null; then
+  echo "ERROR: failed to fetch a valid kubeconfig from VM" >&2
+  exit 1
+fi
 
 echo "==> Installing SigNoz (observability stack)..."
 kubectl apply -f "$K8S/signoz/namespace.yaml"
