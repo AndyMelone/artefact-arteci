@@ -32,6 +32,7 @@ func Init(ctx context.Context) func(context.Context) {
 		Tracer = otel.GetTracerProvider().Tracer("arteci-api")
 		return func(context.Context) {}
 	}
+	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	endpoint := cleanEndpoint(rawEndpoint)
 	useTLS := isTLSEndpoint(rawEndpoint)
