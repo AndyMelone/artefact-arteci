@@ -224,7 +224,12 @@ func processCSV(
 		}
 		colIdxs[i] = idx
 	}
-	bw.WriteString(headerLine + "\n")
+	if _, err := bw.WriteString(headerLine + "\n"); err != nil {
+		src.Close()
+		pw.CloseWithError(err)
+		<-uploadErr
+		return nil, 0, 0, fmt.Errorf("write header: %w", err)
+	}
 
 	observability.ProcessLog.Info(ctx, "CSV header parsed — date columns validated", observability.Attrs{
 		"method":         "processCsv",
@@ -323,10 +328,11 @@ func processCSV(
 		close(resultCh)
 	}()
 
-	allFailedSamples := make(map[int][]string) 
+	allFailedSamples := make(map[int][]string)
 	pending := make(map[int]batchResult)
 	nextWrite := 0
 	var totalRows, totalFailed int64
+	var writeErr error
 	preview := make([]map[string]string, 0, previewMax)
 
 	for res := range resultCh {
@@ -370,12 +376,18 @@ func processCSV(
 					}
 					preview = append(preview, rec)
 				}
-				bw.WriteString(line + "\n")
+				if writeErr == nil {
+					if _, err := bw.WriteString(line + "\n"); err != nil {
+						writeErr = fmt.Errorf("write buffer: %w", err)
+					}
+				}
 			}
 		}
 	}
 
-	bw.Flush()
+	if writeErr == nil {
+		writeErr = bw.Flush()
+	}
 	pw.Close()
 
 	observability.ProcessLog.Info(ctx, "Write buffer flushed — waiting for MinIO upload confirmation", observability.Attrs{
@@ -387,6 +399,9 @@ func processCSV(
 
 	if err := <-uploadErr; err != nil {
 		return nil, totalRows, totalFailed, fmt.Errorf("minio upload: %w", err)
+	}
+	if writeErr != nil {
+		return nil, totalRows, totalFailed, writeErr
 	}
 
 	observability.ProcessLog.Info(ctx, "MinIO write confirmed — file updated in place", observability.Attrs{

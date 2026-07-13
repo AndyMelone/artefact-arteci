@@ -62,7 +62,6 @@ func Columns(mc *storage.MinioClient) http.HandlerFunc {
 			defer obj.Close()
 			scanner := bufio.NewScanner(obj)
 			if !scanner.Scan() {
-				obj.Close()
 				span.SetStatus(codes.Error, "file is empty")
 				jsonError(w, "file is empty", http.StatusUnprocessableEntity)
 				return
