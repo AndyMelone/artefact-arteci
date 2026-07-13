@@ -51,8 +51,7 @@ clickhouse:
 signoz:
   replicaCount: 1
   env:
-    - name: TELEMETRY_ENABLED
-      value: "false"
+    TELEMETRY_ENABLED: "false"
   service:
     type: ClusterIP
     port: 8080
