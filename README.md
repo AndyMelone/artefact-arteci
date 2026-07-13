@@ -68,14 +68,37 @@ ARTECI/
 
 Au démarrage, l'API vérifie automatiquement si ces fichiers sont présents dans le bucket `arteci` et les uploade s'ils manquent.
 
+> **Fichiers volumineux** : le téléchargement depuis Google Drive ou l'upload vers MinIO peut prendre plusieurs minutes, voire échouer pour `lst_of_users_anon_2.csv` (182 MB) et `lst_of_users_anon_3.csv` (931 MB) selon la connexion. En cas d'échec, uploader manuellement avec `mc` :
+
+```bash
+# Installer mc si absent
+# Mac:   brew install minio/stable/mc
+# Linux: curl https://dl.min.io/client/mc/release/linux-amd64/mc -o mc && chmod +x mc && sudo mv mc /usr/local/bin/mc
+
+# Options A et B — MinIO exposé sur localhost:9000
+mc alias set local http://localhost:9000 minioadmin minioadmin
+mc cp ressources/lst_of_users_anon_2.csv local/arteci/
+mc cp ressources/lst_of_users_anon_3.csv local/arteci/
+
+# Option C (Kubernetes) — port-forward MinIO d'abord
+kubectl port-forward svc/minio 9000:9000 -n arteci &
+mc alias set local http://localhost:9000 minioadmin minioadmin
+mc cp ressources/lst_of_users_anon_2.csv local/arteci/
+mc cp ressources/lst_of_users_anon_3.csv local/arteci/
+```
+
 ---
 
 ## Configuration
 
-```bash
-cp .env.example .env
-# Renseigner SIGNOZ_INGESTION_KEY (fourni séparément)
-```
+Le projet utilise **deux fichiers `.env`** selon le mode de lancement :
+
+| Fichier | Utilisé par | Créer avec |
+|---------|------------|------------|
+| `.env` (racine) | Docker Compose (`--env-file .env`) et `deploy-k8s.sh` | `cp .env.example .env` |
+| `go/.env` | API Go en mode local (Option A) | `cp go/.env.example go/.env` |
+
+**`.env` (racine)** — Variables Docker Compose / K8s :
 
 | Variable | Défaut | Description |
 |----------|--------|-------------|
@@ -84,10 +107,21 @@ cp .env.example .env
 | `MINIO_PORT` | `9000` | Port API MinIO |
 | `MINIO_CONSOLE_PORT` | `9001` | Port console MinIO |
 | `MINIO_BUCKET` | `arteci` | Nom du bucket |
-| `MINIO_USE_SSL` | `false` | TLS MinIO |
 | `API_PORT` | `3001` | Port de l'API Go |
-| `OTEL_SERVICE_NAME` | `arteci-api-go` | Nom du service dans SigNoz |
 | `SIGNOZ_INGESTION_KEY` | *(requis pour Cloud)* | Clé d'authentification SigNoz Cloud |
+
+**`go/.env`** — Variables API Go locale (Option A) :
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `MINIO_ENDPOINT` | `localhost` | Hôte MinIO |
+| `MINIO_PORT` | `9000` | Port API MinIO |
+| `MINIO_ACCESS_KEY` | `minioadmin` | Identifiant MinIO |
+| `MINIO_SECRET_KEY` | `minioadmin` | Mot de passe MinIO |
+| `MINIO_BUCKET` | `arteci` | Nom du bucket |
+| `MINIO_USE_SSL` | `false` | TLS MinIO |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(vide)* | Endpoint OTel (vide = désactivé) |
+| `SIGNOZ_INGESTION_KEY` | *(vide)* | Clé SigNoz Cloud (vide = pas d'observabilité) |
 
 > Les valeurs par défaut s'appliquent si la variable est absente — le projet fonctionne sans `.env` (sans observabilité Cloud).
 
@@ -105,7 +139,7 @@ Aucune installation locale. Les données sont envoyées vers l'instance Cloud ma
 
 La clé d'ingestion et l'accès à la plateforme sont fournis séparément via **Doppler** (lien inbox joint à la soumission) — aucun compte à créer.
 
-Une fois la clé reçue, la renseigner dans `.env` :
+Une fois la clé reçue, la renseigner dans `.env` (racine) pour Docker Compose / K8s, ou dans `go/.env` pour le mode local (Option A) :
 
 ```bash
 SIGNOZ_INGESTION_KEY=<clé-reçue-via-doppler>
@@ -123,7 +157,7 @@ docker compose -f docker/docker-compose.signoz.yml up -d
 
 SigNoz UI disponible sur `http://localhost:8080` (premier démarrage : ~2 min le temps que ClickHouse s'initialise).
 
-Laisser `SIGNOZ_INGESTION_KEY` vide dans `.env` — l'exporteur bascule automatiquement en mode non-TLS vers le collector local.
+Laisser `SIGNOZ_INGESTION_KEY` vide dans `.env` (racine) — l'exporteur bascule automatiquement en mode non-TLS vers le collector local.
 
 ---
 
@@ -163,11 +197,12 @@ Laisser `SIGNOZ_INGESTION_KEY` vide dans `.env` — l'exporteur bascule automati
 Prérequis : Go 1.25+, une instance MinIO accessible.
 
 ```bash
-# 1. Créer le .env à la racine
-cp .env.example .env
-# Renseigner SIGNOZ_INGESTION_KEY si observabilité Cloud souhaitée
+# 1. Créer les deux fichiers de config
+cp .env.example .env          # lu par Docker (MinIO) via --env-file
+cp go/.env.example go/.env    # lu par l'API Go (MINIO_ENDPOINT, SIGNOZ_INGESTION_KEY…)
+# Renseigner SIGNOZ_INGESTION_KEY dans go/.env si observabilité Cloud souhaitée
 
-# 2. Démarrer MinIO — credentials lus depuis .env via --env-file
+# 2. Démarrer MinIO — credentials lus depuis .env (racine) via --env-file
 docker run -d -p 9000:9000 -p 9001:9001 \
   --env-file .env \
   minio/minio server /data \
@@ -177,16 +212,16 @@ docker run -d -p 9000:9000 -p 9001:9001 \
 cd go && go run .
 ```
 
-> Si `MINIO_PORT` ou `MINIO_CONSOLE_PORT` ont été modifiés dans `.env`, ajuster les `-p` en conséquence.
+> Si `MINIO_PORT` ou `MINIO_CONSOLE_PORT` ont été modifiés dans `.env` (racine), ajuster les `-p` en conséquence.
 
-L'API charge automatiquement `.env` à la racine, puis `go/.env` en fallback.
+L'API charge automatiquement `go/.env`, puis `.env` (racine) en fallback.
 
 Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de `ressources/` sont uploadés s'ils sont absents.
 
-### Option B — Avec Docker Compose
+### Option B1 — Avec Docker Compose (SigNoz Cloud)
 
 ```bash
-# 1. Créer le fichier de config
+# 1. Créer le fichier de config à la racine
 cp .env.example .env
 # Renseigner SIGNOZ_INGESTION_KEY si mode Cloud (voir section SigNoz ci-dessus)
 
@@ -341,7 +376,7 @@ L'API exporte traces, métriques et logs structurés via OTLP gRPC.
    - **Logs** : onglet **Logs** → filtrer `service.name = arteci-api-go`
    - **Metrics** : onglet **Metrics** → `http.server.request.duration`
 
-> La clé `SIGNOZ_INGESTION_KEY` doit être renseignée dans `.env` (racine). Si absente, l'API démarre mais les données ne sont pas envoyées vers Cloud.
+> La clé `SIGNOZ_INGESTION_KEY` doit être renseignée dans `.env` (racine) pour Docker Compose / K8s, ou dans `go/.env` pour le mode local (Option A). Si absente, l'API démarre mais les données ne sont pas envoyées vers Cloud.
 
 ### Vérifier avec SigNoz self-hosted
 
