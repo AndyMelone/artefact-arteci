@@ -67,7 +67,8 @@ func Columns(mc *storage.MinioClient) http.HandlerFunc {
 				jsonError(w, "file is empty", http.StatusUnprocessableEntity)
 				return
 			}
-			columns = strings.Split(scanner.Text(), ";")
+			line := strings.TrimPrefix(scanner.Text(), "\uFEFF")
+			columns = strings.Split(line, ";")
 		}
 
 		span.SetAttributes(attribute.Int("columns.count", len(columns)))
