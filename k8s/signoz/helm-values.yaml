@@ -8,7 +8,7 @@ postgresql:
   auth:
     database: signoz
     username: signoz
-    password: signoz
+    # password supplied at deploy time via --set-string from SIGNOZ_POSTGRES_PASSWORD (.env)
   primary:
     persistence:
       enabled: true
@@ -52,15 +52,15 @@ signoz:
   replicaCount: 1
   env:
     TELEMETRY_ENABLED: "false"
-    SIGNOZ_TOKENIZER_JWT_SECRET: "arteci-signoz-local-secret-key-32chars"
+    # SIGNOZ_TOKENIZER_JWT_SECRET supplied via --set-string from SIGNOZ_JWT_SECRET (.env)
+    #
     # Auto-provision the first org/admin at startup (v0.112.0+) — without this,
     # OpAMP can never register the collector agent ("cannot create agent
     # without orgId") because no org exists until someone completes the web
     # signup wizard by hand. See https://signoz.io/docs/manage/administrator-guide/configuration/root-user/
+    # SIGNOZ_USER_ROOT_ENABLED/EMAIL/PASSWORD/ORG_NAME supplied via --set-string
+    # from SIGNOZ_ROOT_EMAIL / SIGNOZ_ROOT_PASSWORD / SIGNOZ_ROOT_ORG_NAME (.env)
     SIGNOZ_USER_ROOT_ENABLED: "true"
-    SIGNOZ_USER_ROOT_EMAIL: "admin@arteci.local"
-    SIGNOZ_USER_ROOT_PASSWORD: "Arteci-Signoz-Admin-2026"
-    SIGNOZ_USER_ROOT_ORG_NAME: "arteci"
   service:
     type: ClusterIP
     port: 8080

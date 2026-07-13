@@ -24,6 +24,11 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-arteci-api-go}"
 OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://signoz-otel-collector.monitoring.svc.cluster.local:4317}"
+SIGNOZ_POSTGRES_PASSWORD="${SIGNOZ_POSTGRES_PASSWORD:-signoz}"
+SIGNOZ_JWT_SECRET="${SIGNOZ_JWT_SECRET:-arteci-signoz-local-secret-key-32chars}"
+SIGNOZ_ROOT_EMAIL="${SIGNOZ_ROOT_EMAIL:-admin@arteci.local}"
+SIGNOZ_ROOT_PASSWORD="${SIGNOZ_ROOT_PASSWORD:-Arteci-Signoz-Admin-2026}"
+SIGNOZ_ROOT_ORG_NAME="${SIGNOZ_ROOT_ORG_NAME:-arteci}"
 export API_PORT MINIO_PORT MINIO_CONSOLE_PORT MINIO_USE_SSL MINIO_BUCKET OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT
 
 export KUBECONFIG="$SCRIPT_DIR/kubeconfig.yaml"
@@ -41,15 +46,18 @@ echo "==> Installing SigNoz (observability stack)..."
 kubectl apply -f "$K8S/signoz/namespace.yaml"
 helm repo add signoz https://charts.signoz.io 2>/dev/null || true
 helm repo update signoz
-if helm status signoz -n monitoring > /dev/null 2>&1; then
-  echo "    SigNoz already installed, skipping"
-else
-  helm install signoz signoz/signoz \
-    -n monitoring \
-    -f "$K8S/signoz/helm-values.yaml" \
-    --timeout 10m \
-    --wait
-fi
+# upgrade --install: idempotent, and picks up SIGNOZ_*-from-.env changes on reruns
+# (a plain `helm install` guarded by "already installed, skip" never re-applies them)
+helm upgrade --install signoz signoz/signoz \
+  -n monitoring \
+  -f "$K8S/signoz/helm-values.yaml" \
+  --set-string "postgresql.auth.password=${SIGNOZ_POSTGRES_PASSWORD}" \
+  --set-string "signoz.env.SIGNOZ_TOKENIZER_JWT_SECRET=${SIGNOZ_JWT_SECRET}" \
+  --set-string "signoz.env.SIGNOZ_USER_ROOT_EMAIL=${SIGNOZ_ROOT_EMAIL}" \
+  --set-string "signoz.env.SIGNOZ_USER_ROOT_PASSWORD=${SIGNOZ_ROOT_PASSWORD}" \
+  --set-string "signoz.env.SIGNOZ_USER_ROOT_ORG_NAME=${SIGNOZ_ROOT_ORG_NAME}" \
+  --timeout 10m \
+  --wait
 
 echo ""
 echo "==> Applying arteci manifests..."
