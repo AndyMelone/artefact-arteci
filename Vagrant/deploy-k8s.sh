@@ -23,7 +23,8 @@ MINIO_BUCKET="${MINIO_BUCKET:-arteci}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-arteci-api-go}"
-export API_PORT MINIO_PORT MINIO_CONSOLE_PORT MINIO_USE_SSL MINIO_BUCKET OTEL_SERVICE_NAME
+OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://signoz-otel-collector.monitoring.svc.cluster.local:4317}"
+export API_PORT MINIO_PORT MINIO_CONSOLE_PORT MINIO_USE_SSL MINIO_BUCKET OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT
 
 export KUBECONFIG="$SCRIPT_DIR/kubeconfig.yaml"
 
@@ -58,11 +59,12 @@ kubectl apply -f "$K8S/namespace.yaml"
 kubectl create secret generic arteci-api-secret \
   --from-literal=MINIO_ACCESS_KEY="${MINIO_ROOT_USER}" \
   --from-literal=MINIO_SECRET_KEY="${MINIO_ROOT_PASSWORD}" \
+  --from-literal=SIGNOZ_INGESTION_KEY="${SIGNOZ_INGESTION_KEY:-}" \
   --namespace=arteci \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Apply configmap and deployment with env substitution
-envsubst '${API_PORT} ${MINIO_PORT} ${MINIO_USE_SSL} ${MINIO_BUCKET} ${OTEL_SERVICE_NAME}' \
+envsubst '${API_PORT} ${MINIO_PORT} ${MINIO_USE_SSL} ${MINIO_BUCKET} ${OTEL_SERVICE_NAME} ${OTEL_EXPORTER_OTLP_ENDPOINT}' \
   < "$K8S/go/api-configmap.yaml" | kubectl apply -f -
 
 envsubst '${API_PORT}' \
