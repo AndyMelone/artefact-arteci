@@ -2,7 +2,6 @@ package handler
 
 import (
 	"archive/zip"
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -12,16 +11,19 @@ import (
 )
 
 // fastXLSX processes an XLSX file by streaming ZIP/XML without excelize's full model.
-// Normalizes date columns and writes a modified XLSX to out.
+// Normalizes date columns and writes a modified XLSX to out. r+size back a
+// spilled-to-disk temp file (see spillToTempFile) rather than an in-memory
+// buffer, since archive/zip needs random access but the file may be large.
 func fastXLSX(
-	data []byte,
+	r io.ReaderAt,
+	size int64,
 	dateColumns []string,
 	hints []dateparser.Hint,
 	pMax int,
 	out io.Writer,
 ) (preview []map[string]string, totalRows int64, totalFailed int64, err error) {
 
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zr, err := zip.NewReader(r, size)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("xlsx: open zip: %w", err)
 	}
@@ -157,6 +159,25 @@ func xlsxStreamSheet(
 		if terr != nil {
 			_ = enc.Flush()
 			return nil, 0, 0, fmt.Errorf("xlsx xml: %w", terr)
+		}
+
+		// xml.Encoder re-declares xmlns from Name.Space on every element it
+		// doesn't already know about via EncodeElement — since this decodes
+		// and re-encodes tokens one at a time (never EncodeElement), that
+		// means every element ends up with a redundant xmlns, and the root
+		// element (whose original Attr already has an explicit xmlns) gets
+		// it twice, which strict XML parsers (e.g. Excel, openpyxl) reject
+		// as a duplicate attribute. The default namespace is already
+		// declared once on <worksheet> and inherited by every descendant,
+		// so drop Name.Space before re-encoding instead of letting the
+		// encoder synthesize its own declaration.
+		switch st := tok.(type) {
+		case xml.StartElement:
+			st.Name.Space = ""
+			tok = st
+		case xml.EndElement:
+			st.Name.Space = ""
+			tok = st
 		}
 
 		switch t := tok.(type) {

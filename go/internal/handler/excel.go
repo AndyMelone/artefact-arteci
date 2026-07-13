@@ -2,10 +2,10 @@ package handler
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -15,6 +15,30 @@ import (
 )
 
 const excelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+// spillToTempFile copies src to a temp file and returns it as an io.ReaderAt.
+// archive/zip needs random access (the central directory sits at the end of
+// the file), and a MinIO GetObject stream isn't seekable — so unlike the CSV
+// path, XLSX can't be processed with O(1) memory. Spilling to local disk
+// instead of buffering the whole file in RAM keeps memory flat regardless of
+// file size; the caller must call the returned cleanup func.
+func spillToTempFile(src io.ReadCloser) (f *os.File, size int64, cleanup func(), err error) {
+	defer src.Close()
+	tmp, err := os.CreateTemp("", "arteci-xlsx-*")
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("create temp file: %w", err)
+	}
+	cleanup = func() {
+		tmp.Close()
+		os.Remove(tmp.Name())
+	}
+	n, err := io.Copy(tmp, src)
+	if err != nil {
+		cleanup()
+		return nil, 0, nil, fmt.Errorf("spill to temp file: %w", err)
+	}
+	return tmp, n, cleanup, nil
+}
 
 func processExcel(
 	ctx context.Context,
@@ -29,15 +53,15 @@ func processExcel(
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	data, err := io.ReadAll(src)
-	src.Close()
+	tmp, size, cleanup, err := spillToTempFile(src)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("read excel: %w", err)
+		return nil, 0, 0, err
 	}
+	defer cleanup()
 
-	observability.ProcessLog.Info(ctx, "Excel file loaded — starting fast ZIP/XML processing", observability.Attrs{
+	observability.ProcessLog.Info(ctx, "Excel file spilled to disk — starting fast ZIP/XML processing", observability.Attrs{
 		"method": "processExcel", "bucket": bucket, "file": file,
-		"size_bytes": int64(len(data)),
+		"size_bytes": size,
 	})
 
 	pr, pw := io.Pipe()
@@ -46,7 +70,7 @@ func processExcel(
 		uploadErr <- mc.PutObject(ctx, bucket, file, pr, excelContentType)
 	}()
 
-	preview, totalRows, totalFailed, err := fastXLSX(data, dateColumns, hints, previewMax, pw)
+	preview, totalRows, totalFailed, err := fastXLSX(tmp, size, dateColumns, hints, previewMax, pw)
 	if err != nil {
 		pw.CloseWithError(err)
 		<-uploadErr
@@ -68,13 +92,13 @@ func processExcel(
 }
 
 func columnsFromExcel(obj io.ReadCloser) ([]string, error) {
-	defer obj.Close()
-	data, err := io.ReadAll(obj)
+	tmp, size, cleanup, err := spillToTempFile(obj)
 	if err != nil {
-		return nil, fmt.Errorf("read excel: %w", err)
+		return nil, err
 	}
+	defer cleanup()
 
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zr, err := zip.NewReader(tmp, size)
 	if err != nil {
 		return nil, fmt.Errorf("xlsx: open zip: %w", err)
 	}

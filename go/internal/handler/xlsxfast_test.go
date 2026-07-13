@@ -145,8 +145,11 @@ func TestXlsxStreamSheet_UnknownColumn(t *testing.T) {
 // the full ZIP/XML rewrite path, and confirm both the rewritten sheet and an
 // untouched sibling entry survive the round trip.
 func TestFastXLSX_RoundTrip(t *testing.T) {
+	// Real XLSX sheets declare a default xmlns on <worksheet>, like Excel
+	// and openpyxl actually produce — a bare fixture without it would miss
+	// the xmlns-duplication regression this test guards against.
 	sheet := `<?xml version="1.0"?>
-<worksheet><sheetData>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
 <row r="1"><c r="A1" t="inlineStr"><is><t>NAME</t></is></c><c r="B1" t="inlineStr"><is><t>DATE_CREATION</t></is></c></row>
 <row r="2"><c r="A2" t="inlineStr"><is><t>Alice</t></is></c><c r="B2" t="inlineStr"><is><t>07/17/2019</t></is></c></row>
 </sheetData></worksheet>`
@@ -162,8 +165,9 @@ func TestFastXLSX_RoundTrip(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+	src := bytes.NewReader(srcBuf.Bytes())
 	preview, totalRows, totalFailed, err := fastXLSX(
-		srcBuf.Bytes(), []string{"DATE_CREATION"}, []dateparser.Hint{dateparser.HintMDY}, 100, &out,
+		src, int64(src.Len()), []string{"DATE_CREATION"}, []dateparser.Hint{dateparser.HintMDY}, 100, &out,
 	)
 	if err != nil {
 		t.Fatalf("fastXLSX: %v", err)
@@ -186,6 +190,13 @@ func TestFastXLSX_RoundTrip(t *testing.T) {
 			sawSheet = true
 			if !strings.Contains(string(data), "17-07-2019 00:00:00") {
 				t.Errorf("output sheet1.xml missing normalized date: %s", data)
+			}
+			// Regression: the default xmlns must be declared exactly once
+			// (on the root). Re-declaring it on every element — or twice on
+			// the root — is what a lenient decoder tolerates but strict
+			// parsers (real Excel, openpyxl/lxml) reject as invalid XML.
+			if n := strings.Count(string(data), "xmlns="); n != 1 {
+				t.Errorf("expected exactly one xmlns declaration, found %d: %s", n, data)
 			}
 		case "[Content_Types].xml":
 			sawContentTypes = true
