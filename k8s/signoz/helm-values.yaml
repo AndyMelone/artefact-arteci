@@ -62,7 +62,11 @@ signoz:
     # from SIGNOZ_ROOT_EMAIL / SIGNOZ_ROOT_PASSWORD / SIGNOZ_ROOT_ORG_NAME (.env)
     SIGNOZ_USER_ROOT_ENABLED: "true"
   service:
-    type: ClusterIP
+    # LoadBalancer: k3s' ServiceLB binds this on the Vagrant VM's forwarded
+    # port 8080, giving direct UI access on localhost:8080 with no manual
+    # `kubectl port-forward` — convenient for this local sandbox only. On a
+    # real cloud cluster, put this behind ClusterIP + Ingress + auth instead.
+    type: LoadBalancer
     port: 8080
   resources:
     requests:

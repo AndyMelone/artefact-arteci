@@ -1,0 +1,13 @@
+.git/
+.github/
+.claude/
+Vagrant/
+k8s/
+docker/
+ressources/
+fixtures/
+README.md
+.env
+.env.example
+.gitignore
+go/arteci-go

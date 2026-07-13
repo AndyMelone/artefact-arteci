@@ -29,7 +29,10 @@ SIGNOZ_JWT_SECRET="${SIGNOZ_JWT_SECRET:-arteci-signoz-local-secret-key-32chars}"
 SIGNOZ_ROOT_EMAIL="${SIGNOZ_ROOT_EMAIL:-admin@arteci.local}"
 SIGNOZ_ROOT_PASSWORD="${SIGNOZ_ROOT_PASSWORD:-Arteci-Signoz-Admin-2026}"
 SIGNOZ_ROOT_ORG_NAME="${SIGNOZ_ROOT_ORG_NAME:-arteci}"
-export API_PORT MINIO_PORT MINIO_CONSOLE_PORT MINIO_USE_SSL MINIO_BUCKET OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT
+# Pin to a CI-built sha (e.g. API_IMAGE_TAG=abc1234 in .env) for reproducible
+# deploys; defaults to :latest to keep zero-config usage working.
+API_IMAGE_TAG="${API_IMAGE_TAG:-latest}"
+export API_PORT MINIO_PORT MINIO_CONSOLE_PORT MINIO_USE_SSL MINIO_BUCKET OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT API_IMAGE_TAG
 
 export KUBECONFIG="$SCRIPT_DIR/kubeconfig.yaml"
 
@@ -75,7 +78,7 @@ kubectl create secret generic arteci-api-secret \
 envsubst '${API_PORT} ${MINIO_PORT} ${MINIO_USE_SSL} ${MINIO_BUCKET} ${OTEL_SERVICE_NAME} ${OTEL_EXPORTER_OTLP_ENDPOINT}' \
   < "$K8S/go/api-configmap.yaml" | kubectl apply -f -
 
-envsubst '${API_PORT}' \
+envsubst '${API_PORT} ${API_IMAGE_TAG}' \
   < "$K8S/go/api-deployment.yaml" | kubectl apply -f -
 
 MINIO_VARS='${MINIO_PORT} ${MINIO_CONSOLE_PORT} ${MINIO_BUCKET}'
@@ -96,6 +99,7 @@ echo "==> Waiting for API..."
 kubectl rollout status deployment/arteci-api -n arteci --timeout=120s
 
 echo ""
-echo "==> Stack ready."
-echo "    API    : curl http://localhost:${API_PORT}/health"
-echo "    SigNoz : kubectl port-forward svc/signoz 8080:8080 -n monitoring"
+echo "==> Stack ready — accessible directly, no port-forward needed:"
+echo "    API           : curl http://localhost:${API_PORT}/health"
+echo "    MinIO console : http://localhost:${MINIO_CONSOLE_PORT}"
+echo "    SigNoz        : http://localhost:8080"

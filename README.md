@@ -314,6 +314,10 @@ Le script `deploy-k8s.sh` :
 - Installe **SigNoz** via Helm (namespace `monitoring`)
 - Attend que MinIO, le job d'init et l'API soient prêts
 
+> **Taille des fixtures en k8s** : `../ressources` (voir [Fichiers de test](#fichiers-de-test)) est synchronisé dans la VM et monté dans le job `minio-init` — si tu y as placé les fichiers complets avant `vagrant up`, `lst_of_users_anon_1.csv` est seedé à sa taille réelle (320K lignes), comme en Option A/B. Sans ça, le job retombe sur l'échantillon de 200 lignes embarqué dans un `ConfigMap` (les fichiers complets, jusqu'à 931 Mo, ne rentreraient pas dans la limite etcd de ~1 Mio d'un ConfigMap).
+
+> **Épingler une version de l'image** : `API_IMAGE_TAG` dans `.env` (défaut `latest`) permet de déployer un tag précis (ex. le SHA produit par la CI) plutôt que de suivre `:latest`.
+
 Accès à SigNoz après déploiement :
 
 ```bash

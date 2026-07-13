@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: arteci-api
-          image: melone30/arteci-api-go:latest
+          image: melone30/arteci-api-go:${API_IMAGE_TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: ${API_PORT}
