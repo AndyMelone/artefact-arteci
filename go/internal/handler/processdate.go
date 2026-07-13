@@ -2,7 +2,9 @@ package handler
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,14 +50,14 @@ type processRequest struct {
 
 type batchJob struct {
 	id      int
-	lines   []string
+	records [][]string
 	colIdxs []int
 	hints   []dateparser.Hint
 }
 
 type batchResult struct {
 	id            int
-	lines         []string
+	records       [][]string
 	failed        int
 	failedSamples map[int][]string // colIdx → up to 5 raw values that failed
 }
@@ -196,18 +198,29 @@ func processCSV(
 		"method": "processCsv", "bucket": bucket, "file": file,
 	})
 
-	bw := bufio.NewWriterSize(pw, writeBufSize)
-	scanner := bufio.NewScanner(src)
-	scanner.Buffer(make([]byte, scanBufSize), scanBufSize)
-
-	if !scanner.Scan() {
-		src.Close()
-		pw.CloseWithError(fmt.Errorf("empty file"))
-		<-uploadErr
-		return nil, 0, 0, fmt.Errorf("empty file")
+	br := bufio.NewReaderSize(src, scanBufSize)
+	if bom, _ := br.Peek(3); bytes.Equal(bom, []byte{0xEF, 0xBB, 0xBF}) {
+		br.Discard(3)
 	}
-	headerLine := strings.TrimPrefix(scanner.Text(), "\uFEFF")
-	headers := strings.Split(headerLine, ";")
+	sample, _ := br.Peek(scanBufSize)
+	delim := detectDelimiter(sample)
+
+	cr := csv.NewReader(br)
+	cr.Comma = delim
+	cr.LazyQuotes = true    // a stray quote in a cell shouldn't block the whole file
+	cr.FieldsPerRecord = -1 // rows with a different field count are handled below, not rejected outright
+
+	bw := bufio.NewWriterSize(pw, writeBufSize)
+	cw := csv.NewWriter(bw)
+	cw.Comma = delim
+
+	headers, err := cr.Read()
+	if err != nil {
+		src.Close()
+		pw.CloseWithError(fmt.Errorf("empty or unreadable file"))
+		<-uploadErr
+		return nil, 0, 0, fmt.Errorf("empty or unreadable file: %w", err)
+	}
 	headerIdx := make(map[string]int, len(headers))
 	for i, h := range headers {
 		headerIdx[h] = i
@@ -224,7 +237,7 @@ func processCSV(
 		}
 		colIdxs[i] = idx
 	}
-	if _, err := bw.WriteString(headerLine + "\n"); err != nil {
+	if err := cw.Write(headers); err != nil {
 		src.Close()
 		pw.CloseWithError(err)
 		<-uploadErr
@@ -235,6 +248,7 @@ func processCSV(
 		"method":         "processCsv",
 		"bucket":         bucket,
 		"file":           file,
+		"delimiter":      string(delim),
 		"col_count":      len(headers),
 		"date_col_count": len(dateColumns),
 		"date_columns":   strings.Join(dateColumns, ","),
@@ -254,16 +268,15 @@ func processCSV(
 		go func() {
 			colCache := make(map[int]string)
 			for job := range jobCh {
-				out := make([]string, len(job.lines))
+				out := make([][]string, len(job.records))
 				failed := 0
 				failedSamples := make(map[int][]string)
-				for r, line := range job.lines {
-					parts := strings.Split(line, ";")
+				for r, rec := range job.records {
 					for ci, idx := range job.colIdxs {
-						if idx >= len(parts) {
+						if idx >= len(rec) {
 							continue
 						}
-						raw := parts[idx]
+						raw := rec[idx]
 						res := dateparser.Normalize(raw, job.hints[ci], colCache[idx])
 						if res.MatchedFormat != "" {
 							colCache[idx] = res.MatchedFormat
@@ -284,38 +297,43 @@ func processCSV(
 								failedSamples[idx] = append(failedSamples[idx], raw)
 							}
 						}
-						parts[idx] = res.Normalized
+						rec[idx] = res.Normalized
 					}
-					out[r] = strings.Join(parts, ";")
+					out[r] = rec
 				}
-				resultCh <- batchResult{id: job.id, lines: out, failed: failed, failedSamples: failedSamples}
+				resultCh <- batchResult{id: job.id, records: out, failed: failed, failedSamples: failedSamples}
 				wg.Done()
 			}
 		}()
 	}
 
+	var scanErr error
 	go func() {
 		defer src.Close()
 		batchID := 0
 		batchCount := 0
-		batch := make([]string, 0, batchSize)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if line == "" {
-				continue
+		batch := make([][]string, 0, batchSize)
+		for {
+			rec, rerr := cr.Read()
+			if rerr == io.EOF {
+				break
 			}
-			batch = append(batch, line)
+			if rerr != nil {
+				scanErr = fmt.Errorf("read row %d: %w", batchID*batchSize+len(batch)+1, rerr)
+				break
+			}
+			batch = append(batch, rec)
 			if len(batch) == batchSize {
 				wg.Add(1)
-				jobCh <- batchJob{id: batchID, lines: batch, colIdxs: colIdxs, hints: hints}
-				batch = make([]string, 0, batchSize)
+				jobCh <- batchJob{id: batchID, records: batch, colIdxs: colIdxs, hints: hints}
+				batch = make([][]string, 0, batchSize)
 				batchID++
 				batchCount++
 			}
 		}
 		if len(batch) > 0 {
 			wg.Add(1)
-			jobCh <- batchJob{id: batchID, lines: batch, colIdxs: colIdxs, hints: hints}
+			jobCh <- batchJob{id: batchID, records: batch, colIdxs: colIdxs, hints: hints}
 			batchCount++
 		}
 		close(jobCh)
@@ -353,7 +371,7 @@ func processCSV(
 			nextWrite++
 			totalFailed += int64(r.failed)
 
-			for _, line := range r.lines {
+			for _, rec := range r.records {
 				totalRows++
 				if totalRows%1_000_000 == 0 {
 					var mem runtime.MemStats
@@ -365,26 +383,32 @@ func processCSV(
 					})
 				}
 				if len(preview) < previewMax {
-					parts := strings.Split(line, ";")
-					rec := make(map[string]string, len(headers))
+					previewRec := make(map[string]string, len(headers))
 					for i, h := range headers {
-						if i < len(parts) {
-							rec[h] = parts[i]
+						if i < len(rec) {
+							previewRec[h] = rec[i]
 						} else {
-							rec[h] = ""
+							previewRec[h] = ""
 						}
 					}
-					preview = append(preview, rec)
+					preview = append(preview, previewRec)
 				}
 				if writeErr == nil {
-					if _, err := bw.WriteString(line + "\n"); err != nil {
-						writeErr = fmt.Errorf("write buffer: %w", err)
+					if err := cw.Write(rec); err != nil {
+						writeErr = fmt.Errorf("write row: %w", err)
 					}
 				}
 			}
 		}
 	}
 
+	if scanErr != nil && writeErr == nil {
+		writeErr = scanErr
+	}
+	cw.Flush()
+	if writeErr == nil {
+		writeErr = cw.Error()
+	}
 	if writeErr == nil {
 		writeErr = bw.Flush()
 	}

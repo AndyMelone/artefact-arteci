@@ -2,6 +2,8 @@ package handler
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
@@ -60,14 +62,21 @@ func Columns(mc *storage.MinioClient) http.HandlerFunc {
 			}
 		} else {
 			defer obj.Close()
-			scanner := bufio.NewScanner(obj)
-			if !scanner.Scan() {
-				span.SetStatus(codes.Error, "file is empty")
-				jsonError(w, "file is empty", http.StatusUnprocessableEntity)
+			br := bufio.NewReader(obj)
+			if bom, _ := br.Peek(3); bytes.Equal(bom, []byte{0xEF, 0xBB, 0xBF}) {
+				br.Discard(3)
+			}
+			sample, _ := br.Peek(4096)
+			cr := csv.NewReader(br)
+			cr.Comma = detectDelimiter(sample)
+			cr.LazyQuotes = true
+			cr.FieldsPerRecord = -1
+			columns, err = cr.Read()
+			if err != nil {
+				span.SetStatus(codes.Error, "file is empty or unreadable")
+				jsonError(w, "file is empty or unreadable", http.StatusUnprocessableEntity)
 				return
 			}
-			line := strings.TrimPrefix(scanner.Text(), "\uFEFF")
-			columns = strings.Split(line, ";")
 		}
 
 		span.SetAttributes(attribute.Int("columns.count", len(columns)))
