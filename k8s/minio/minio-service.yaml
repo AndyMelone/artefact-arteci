@@ -13,10 +13,4 @@ spec:
     - name: console
       port: ${MINIO_CONSOLE_PORT}
       targetPort: ${MINIO_CONSOLE_PORT}
-  # LoadBalancer: k3s' built-in ServiceLB binds this directly on the Vagrant
-  # VM's forwarded ports (9000/9001), giving console access on
-  # localhost:9001 with no manual `kubectl port-forward` step — convenient
-  # for this local sandbox. On a REAL cloud cluster this would put the raw
-  # storage API on the public internet with static credentials — switch
-  # back to ClusterIP + Ingress (or keep it port-forward-only) there.
   type: LoadBalancer

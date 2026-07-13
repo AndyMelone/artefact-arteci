@@ -47,11 +47,9 @@ func TestXlsxSSVal(t *testing.T) {
 	if got := xlsxSSVal(ss, "1"); got != "bar" {
 		t.Errorf("xlsxSSVal(1) = %q, want %q", got, "bar")
 	}
-	// out of range index falls back to the raw string, doesn't panic
 	if got := xlsxSSVal(ss, "99"); got != "99" {
 		t.Errorf("xlsxSSVal(99) = %q, want %q", got, "99")
 	}
-	// non-numeric input falls back to the raw string
 	if got := xlsxSSVal(ss, "abc"); got != "abc" {
 		t.Errorf("xlsxSSVal(abc) = %q, want %q", got, "abc")
 	}
@@ -141,13 +139,8 @@ func TestXlsxStreamSheet_UnknownColumn(t *testing.T) {
 	}
 }
 
-// fastXLSX end-to-end: build a minimal in-memory xlsx (zip), run it through
-// the full ZIP/XML rewrite path, and confirm both the rewritten sheet and an
-// untouched sibling entry survive the round trip.
+
 func TestFastXLSX_RoundTrip(t *testing.T) {
-	// Real XLSX sheets declare a default xmlns on <worksheet>, like Excel
-	// and openpyxl actually produce — a bare fixture without it would miss
-	// the xmlns-duplication regression this test guards against.
 	sheet := `<?xml version="1.0"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
 <row r="1"><c r="A1" t="inlineStr"><is><t>NAME</t></is></c><c r="B1" t="inlineStr"><is><t>DATE_CREATION</t></is></c></row>
@@ -191,10 +184,6 @@ func TestFastXLSX_RoundTrip(t *testing.T) {
 			if !strings.Contains(string(data), "17-07-2019 00:00:00") {
 				t.Errorf("output sheet1.xml missing normalized date: %s", data)
 			}
-			// Regression: the default xmlns must be declared exactly once
-			// (on the root). Re-declaring it on every element — or twice on
-			// the root — is what a lenient decoder tolerates but strict
-			// parsers (real Excel, openpyxl/lxml) reject as invalid XML.
 			if n := strings.Count(string(data), "xmlns="); n != 1 {
 				t.Errorf("expected exactly one xmlns declaration, found %d: %s", n, data)
 			}

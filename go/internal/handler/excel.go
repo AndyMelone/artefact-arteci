@@ -16,12 +16,6 @@ import (
 
 const excelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-// spillToTempFile copies src to a temp file and returns it as an io.ReaderAt.
-// archive/zip needs random access (the central directory sits at the end of
-// the file), and a MinIO GetObject stream isn't seekable — so unlike the CSV
-// path, XLSX can't be processed with O(1) memory. Spilling to local disk
-// instead of buffering the whole file in RAM keeps memory flat regardless of
-// file size; the caller must call the returned cleanup func.
 func spillToTempFile(src io.ReadCloser) (f *os.File, size int64, cleanup func(), err error) {
 	defer src.Close()
 	tmp, err := os.CreateTemp("", "arteci-xlsx-*")

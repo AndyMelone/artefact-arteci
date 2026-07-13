@@ -118,9 +118,6 @@ func initLogProvider(ctx context.Context, endpoint string, useTLS bool, res *res
 	return lp
 }
 
-// tlsOpts picks TLS vs. insecure transport from the endpoint itself (useTLS),
-// and attaches auth headers independently — a self-hosted collector reached
-// over plain gRPC can still carry a SIGNOZ_INGESTION_KEY (or none at all).
 func tlsOpts[T any](useTLS bool, insecure T, withTLS func(credentials.TransportCredentials) T, withHeaders func(map[string]string) T) []T {
 	var opts []T
 	if useTLS {
@@ -134,9 +131,6 @@ func tlsOpts[T any](useTLS bool, insecure T, withTLS func(credentials.TransportC
 	return opts
 }
 
-// isTLSEndpoint decides TLS from the endpoint's own scheme. Without an
-// explicit scheme (the common case — e.g. "ingest.us2.signoz.cloud:443" or
-// "signoz-ingester:4317"), fall back to the well-known TLS port 443.
 func isTLSEndpoint(raw string) bool {
 	switch {
 	case strings.HasPrefix(raw, "https://"):

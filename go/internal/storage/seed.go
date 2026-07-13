@@ -14,12 +14,6 @@ import (
 	"arteci-go/internal/observability"
 )
 
-// driveIDsRaw is the single source of truth for Google Drive file IDs,
-// shared with docker/scripts/minio-init.sh and k8s/minio/minio-init-job.yaml
-// (both read the same file, synced/mounted from this same path) — add
-// missing IDs there when files are shared, not as a fourth hardcoded copy.
-//
-//go:embed drive-ids.env
 var driveIDsRaw string
 
 var driveFileIDs = parseDriveIDs(driveIDsRaw)

@@ -10,10 +10,6 @@ import (
 	"arteci-go/internal/dateparser"
 )
 
-// fastXLSX processes an XLSX file by streaming ZIP/XML without excelize's full model.
-// Normalizes date columns and writes a modified XLSX to out. r+size back a
-// spilled-to-disk temp file (see spillToTempFile) rather than an in-memory
-// buffer, since archive/zip needs random access but the file may be large.
 func fastXLSX(
 	r io.ReaderAt,
 	size int64,
@@ -50,7 +46,7 @@ func fastXLSX(
 
 	zw := zip.NewWriter(out)
 
-	// Copy all entries except sheet1 verbatim (no decompression overhead)
+
 	for _, f := range zr.File {
 		if f.Name == sheetPath {
 			continue
@@ -69,7 +65,7 @@ func fastXLSX(
 		}
 	}
 
-	// Stream-normalize sheet1.xml through a pipe to avoid buffering the full XML
+
 	pr, pw := io.Pipe()
 	var normalizeErr error
 
@@ -105,7 +101,7 @@ func fastXLSX(
 	return preview, totalRows, totalFailed, nil
 }
 
-// xlsxStreamSheet reads sheet XML, normalizes date cells, writes transformed XML to w.
+
 func xlsxStreamSheet(
 	r io.Reader,
 	w io.Writer,
@@ -118,7 +114,6 @@ func xlsxStreamSheet(
 	dec := xml.NewDecoder(r)
 	enc := xml.NewEncoder(w)
 
-	// Built from header row, maps colIdx → hint index
 	dateHint := make(map[int]int)
 	colCaches := make([]map[int]string, len(hints))
 	for i := range colCaches {
@@ -129,7 +124,6 @@ func xlsxStreamSheet(
 	var (
 		rowNum int
 
-		// date cell
 		inDate      bool
 		dateRef     string
 		dateTyp     string
@@ -138,7 +132,6 @@ func xlsxStreamSheet(
 		inIS        bool
 		inIST       bool
 
-		// non-date cell (tracked for header row + preview rows)
 		trackRow      bool
 		inOther       bool
 		otherRef      string
@@ -160,17 +153,6 @@ func xlsxStreamSheet(
 			_ = enc.Flush()
 			return nil, 0, 0, fmt.Errorf("xlsx xml: %w", terr)
 		}
-
-		// xml.Encoder re-declares xmlns from Name.Space on every element it
-		// doesn't already know about via EncodeElement — since this decodes
-		// and re-encodes tokens one at a time (never EncodeElement), that
-		// means every element ends up with a redundant xmlns, and the root
-		// element (whose original Attr already has an explicit xmlns) gets
-		// it twice, which strict XML parsers (e.g. Excel, openpyxl) reject
-		// as a duplicate attribute. The default namespace is already
-		// declared once on <worksheet> and inherited by every descendant,
-		// so drop Name.Space before re-encoding instead of letting the
-		// encoder synthesize its own declaration.
 		switch st := tok.(type) {
 		case xml.StartElement:
 			st.Name.Space = ""
@@ -246,7 +228,6 @@ func xlsxStreamSheet(
 			switch t.Name.Local {
 			case "row":
 				if rowNum == 1 {
-					// Build headers from decoded cells
 					maxCol := 0
 					for ci := range curRow {
 						if ci > maxCol {
@@ -257,7 +238,6 @@ func xlsxStreamSheet(
 					for ci, v := range curRow {
 						headers[ci] = v
 					}
-					// Map dateColumns → colIdx
 					hIdx := make(map[string]int, len(headers))
 					for i, h := range headers {
 						hIdx[strings.TrimSpace(h)] = i
@@ -386,7 +366,6 @@ func xlsxStreamSheet(
 	return preview, totalRows, totalFailed, enc.Flush()
 }
 
-// xlsxReadFirstRow reads only the header row from sheet1.xml.
 func xlsxReadFirstRow(r io.Reader, ss []string) ([]string, error) {
 	dec := xml.NewDecoder(r)
 	var (
@@ -487,7 +466,6 @@ done:
 	return result, nil
 }
 
-// xlsxParseSST parses xl/sharedStrings.xml into a string slice.
 func xlsxParseSST(r io.Reader) ([]string, error) {
 	var result []string
 	var buf strings.Builder
@@ -526,7 +504,6 @@ func xlsxParseSST(r io.Reader) ([]string, error) {
 	return result, nil
 }
 
-// xlsxSSVal resolves a shared string index ("42") to the actual string value.
 func xlsxSSVal(ss []string, idxStr string) string {
 	n := 0
 	for _, d := range idxStr {
@@ -541,7 +518,6 @@ func xlsxSSVal(ss []string, idxStr string) string {
 	return idxStr
 }
 
-// xlsxCellCol returns the 0-based column index from a cell ref ("A1"→0, "C3"→2).
 func xlsxCellCol(ref string) int {
 	n := 0
 	for _, c := range ref {
@@ -553,7 +529,6 @@ func xlsxCellCol(ref string) int {
 	return n - 1
 }
 
-// xlsxAttr returns an XML attribute value by local name.
 func xlsxAttr(attrs []xml.Attr, local string) string {
 	for _, a := range attrs {
 		if a.Name.Local == local {
