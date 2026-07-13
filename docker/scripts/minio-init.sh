@@ -24,9 +24,6 @@ done
 mc mb --ignore-existing "local/$BUCKET"
 echo "[minio-init] bucket '$BUCKET' prêt"
 
-# Single source of truth for Google Drive IDs — go/internal/storage/drive-ids.env,
-# also embedded into the Go binary and mounted into the k8s minio-init job.
-# Pure shell (no grep — not present in minio/mc's base image).
 get_drive_id() {
   [ -f /data/drive-ids.env ] || return
   while IFS='=' read -r name id; do
@@ -52,27 +49,29 @@ for f in lst_of_users_anon_1.csv lst_of_users_anon_1.xlsx; do
 
   uploaded=0
 
-  drive_id=$(get_drive_id "$f")
-  if [ -n "$drive_id" ] && command -v wget > /dev/null 2>&1; then
-    echo "[minio-init] downloading $f from Google Drive..."
-    if drive_download "$drive_id" "/tmp/$f"; then
-      mc cp "/tmp/$f" "local/$BUCKET/$f"
-      rm -f "/tmp/$f"
-      echo "[minio-init] $f uploaded from Google Drive"
-      uploaded=1
-    else
-      echo "[minio-init] Google Drive unavailable for $f, trying local..."
-      rm -f "/tmp/$f"
-    fi
+  if [ -f "/data/ressources/$f" ]; then
+    echo "[minio-init] uploading $f from local ressources..."
+    mc cp "/data/ressources/$f" "local/$BUCKET/$f"
+    uploaded=1
+  elif [ -f "/data/fixtures/$f" ]; then
+    echo "[minio-init] uploading $f from local fixtures..."
+    mc cp "/data/fixtures/$f" "local/$BUCKET/$f"
+    uploaded=1
   fi
 
   if [ "$uploaded" = "0" ]; then
-    if [ -f "/data/ressources/$f" ]; then
-      echo "[minio-init] uploading $f from local ressources..."
-      mc cp "/data/ressources/$f" "local/$BUCKET/$f"
-    elif [ -f "/data/fixtures/$f" ]; then
-      echo "[minio-init] uploading $f from local fixtures..."
-      mc cp "/data/fixtures/$f" "local/$BUCKET/$f"
+    drive_id=$(get_drive_id "$f")
+    if [ -n "$drive_id" ] && command -v wget > /dev/null 2>&1; then
+      echo "[minio-init] downloading $f from Google Drive (no local source found)..."
+      if drive_download "$drive_id" "/tmp/$f"; then
+        mc cp "/tmp/$f" "local/$BUCKET/$f"
+        rm -f "/tmp/$f"
+        echo "[minio-init] $f uploaded from Google Drive"
+        uploaded=1
+      else
+        rm -f "/tmp/$f"
+        echo "[minio-init] WARNING: $f not found in any source"
+      fi
     else
       echo "[minio-init] WARNING: $f not found in any source"
     fi

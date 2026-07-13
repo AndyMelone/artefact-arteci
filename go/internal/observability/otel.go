@@ -20,7 +20,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var Tracer trace.Tracer
@@ -38,6 +40,16 @@ func Init(ctx context.Context) func(context.Context) {
 	useTLS := isTLSEndpoint(rawEndpoint)
 	name := getEnvOr("OTEL_SERVICE_NAME", "arteci-api-go")
 
+	conn, err := buildGRPCConn(endpoint, useTLS)
+	if err != nil {
+		log.Printf("[otel] gRPC dial: %v (observability disabled)", err)
+		Tracer = otel.GetTracerProvider().Tracer("arteci-api")
+		return func(context.Context) {}
+	}
+	log.Printf("[otel] connecting → %s (tls=%v)", endpoint, useTLS)
+
+	headers := parseOTLPHeaders()
+
 	res, _ := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(name),
@@ -46,9 +58,9 @@ func Init(ctx context.Context) func(context.Context) {
 		resource.WithTelemetrySDK(),
 	)
 
-	tp := initTracer(ctx, endpoint, useTLS, res)
-	mp := initMeter(ctx, endpoint, useTLS, res)
-	lp := initLogProvider(ctx, endpoint, useTLS, res)
+	tp := initTracer(ctx, conn, headers, res)
+	mp := initMeter(ctx, conn, headers, res)
+	lp := initLogProvider(ctx, conn, headers, res)
 
 	Tracer = otel.GetTracerProvider().Tracer("arteci-api")
 
@@ -62,12 +74,25 @@ func Init(ctx context.Context) func(context.Context) {
 		if lp != nil {
 			_ = lp.Shutdown(ctx)
 		}
+		_ = conn.Close()
 	}
 }
 
-func initTracer(ctx context.Context, endpoint string, useTLS bool, res *resource.Resource) *sdktrace.TracerProvider {
-	opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-	opts = append(opts, tlsOpts(useTLS, otlptracegrpc.WithInsecure(), otlptracegrpc.WithTLSCredentials, otlptracegrpc.WithHeaders)...)
+func buildGRPCConn(endpoint string, useTLS bool) (*grpc.ClientConn, error) {
+	var creds credentials.TransportCredentials
+	if useTLS {
+		creds = credentials.NewTLS(&tls.Config{})
+	} else {
+		creds = insecure.NewCredentials()
+	}
+	return grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
+}
+
+func initTracer(ctx context.Context, conn *grpc.ClientConn, headers map[string]string, res *resource.Resource) *sdktrace.TracerProvider {
+	opts := []otlptracegrpc.Option{otlptracegrpc.WithGRPCConn(conn)}
+	if len(headers) > 0 {
+		opts = append(opts, otlptracegrpc.WithHeaders(headers))
+	}
 	exp, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] trace exporter init: %v (traces disabled)", err)
@@ -85,9 +110,11 @@ func initTracer(ctx context.Context, endpoint string, useTLS bool, res *resource
 	return tp
 }
 
-func initMeter(ctx context.Context, endpoint string, useTLS bool, res *resource.Resource) *sdkmetric.MeterProvider {
-	opts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(endpoint)}
-	opts = append(opts, tlsOpts(useTLS, otlpmetricgrpc.WithInsecure(), otlpmetricgrpc.WithTLSCredentials, otlpmetricgrpc.WithHeaders)...)
+func initMeter(ctx context.Context, conn *grpc.ClientConn, headers map[string]string, res *resource.Resource) *sdkmetric.MeterProvider {
+	opts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithGRPCConn(conn)}
+	if len(headers) > 0 {
+		opts = append(opts, otlpmetricgrpc.WithHeaders(headers))
+	}
 	exp, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] metric exporter init: %v (metrics disabled)", err)
@@ -103,9 +130,11 @@ func initMeter(ctx context.Context, endpoint string, useTLS bool, res *resource.
 	return mp
 }
 
-func initLogProvider(ctx context.Context, endpoint string, useTLS bool, res *resource.Resource) *sdklog.LoggerProvider {
-	opts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(endpoint)}
-	opts = append(opts, tlsOpts(useTLS, otlploggrpc.WithInsecure(), otlploggrpc.WithTLSCredentials, otlploggrpc.WithHeaders)...)
+func initLogProvider(ctx context.Context, conn *grpc.ClientConn, headers map[string]string, res *resource.Resource) *sdklog.LoggerProvider {
+	opts := []otlploggrpc.Option{otlploggrpc.WithGRPCConn(conn)}
+	if len(headers) > 0 {
+		opts = append(opts, otlploggrpc.WithHeaders(headers))
+	}
 	exp, err := otlploggrpc.New(ctx, opts...)
 	if err != nil {
 		log.Printf("[otel] log exporter init: %v (otel logs disabled)", err)
@@ -117,19 +146,6 @@ func initLogProvider(ctx context.Context, endpoint string, useTLS bool, res *res
 	)
 	otelglobal.SetLoggerProvider(lp)
 	return lp
-}
-
-func tlsOpts[T any](useTLS bool, insecure T, withTLS func(credentials.TransportCredentials) T, withHeaders func(map[string]string) T) []T {
-	var opts []T
-	if useTLS {
-		opts = append(opts, withTLS(credentials.NewTLS(&tls.Config{})))
-	} else {
-		opts = append(opts, insecure)
-	}
-	if headers := parseOTLPHeaders(); len(headers) > 0 {
-		opts = append(opts, withHeaders(headers))
-	}
-	return opts
 }
 
 func isTLSEndpoint(raw string) bool {

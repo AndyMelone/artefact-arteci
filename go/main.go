@@ -38,10 +38,11 @@ func main() {
 	if err := mc.EnsureBucket(ctx); err != nil {
 		log.Printf("[warn] bucket ensure: %v", err)
 	}
-	go mc.SeedBucket(ctx,
-		[]string{"ressources", "fixtures", "../ressources", "../fixtures"},
-		[]string{"lst_of_users_anon_1.csv"},
-	)
+	seedDirs := []string{"ressources", "fixtures", "../ressources", "../fixtures"}
+	for _, f := range []string{"lst_of_users_anon_1.csv", "lst_of_users_anon_2.csv", "lst_of_users_anon_3.csv"} {
+		f := f
+		go mc.SeedBucket(ctx, seedDirs, []string{f})
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
