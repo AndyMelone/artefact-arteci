@@ -368,7 +368,70 @@ Source : Qlik Talend Data Preparation 8.0.
 
 Cellule vide ou valeur non parseable → retournée telle quelle, sans erreur.
 
+---
 
+## Performance — pourquoi Go, et avec quels chiffres
+
+### Choix du langage
+
+Go a été retenu pour trois raisons concrètes, pas seulement une réputation de rapidité :
+
+- **Concurrence triviale** : un pool de workers (`goroutines` + channels) pour paralléliser le parsing sans bibliothèque tierce ni GIL à contourner — pertinent pour l'exigence de scalabilité du brief.
+- **Binaire statique** : image Docker `FROM scratch` de quelques Mo, démarrage quasi instantané, pas de runtime à embarquer (contrairement à une JVM ou un interpréteur Python/Node).
+- **Streaming natif** (`io.Reader`/`io.Writer`, `bufio`) : le chemin CSV lit, transforme et ré-écrit vers MinIO sans jamais charger le fichier entier en mémoire — la mémoire ne croît pas avec la taille du fichier.
+
+### Méthodologie du benchmark
+
+Comparé à **pandas** (`pandas.to_datetime` + `read_csv`/`to_csv`), l'outil le plus courant pour ce type de tâche en Python — sur le fichier réel `lst_of_users_anon_1.csv` (320 398 lignes, 3 colonnes de dates, format MDY), sur la même machine (16 vCPU, 30 Gio RAM, Go 1.26.5) :
+
+```bash
+# Go — via l'API, MinIO réel (GET + PUT réseau inclus dans la mesure)
+time curl -s -X POST http://localhost:3001/processDate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bucket": "arteci",
+    "file": "lst_of_users_anon_1.csv",
+    "date_columns": ["DATE_CREATION", "DATE_DESACTIVATION", "DATE_DERNIERE_CONNECTION_1"],
+    "date_formats": ["MDY", "MDY", "MDY"]
+  }'
+
+# Python/pandas — fichiers locaux, sans réseau (voir script ci-dessous)
+python3 bench_pandas.py lst_of_users_anon_1.csv
+```
+
+<details>
+<summary><code>bench_pandas.py</code> — script utilisé pour la comparaison</summary>
+
+```python
+import sys, time
+import pandas as pd
+
+src = sys.argv[1]
+date_cols = ["DATE_CREATION", "DATE_DESACTIVATION", "DATE_DERNIERE_CONNECTION_1"]
+
+t0 = time.perf_counter()
+df = pd.read_csv(src, sep=";", dtype=str, keep_default_na=False)
+for col in date_cols:
+    parsed = pd.to_datetime(df[col], format="%m/%d/%Y", errors="coerce")
+    df[col] = parsed.dt.strftime("%d-%m-%Y %H:%M:%S").fillna(df[col])
+df.to_csv(src + ".out.csv", sep=";", index=False)
+t1 = time.perf_counter()
+print(f"rows={len(df)} total_s={t1-t0:.3f} rows_per_sec={len(df)/(t1-t0):.0f}")
+```
+</details>
+
+### Résultats mesurés
+
+| | Go (cette API) | Python/pandas |
+|---|---|---|
+| Temps total | **756 ms** | 3 730 ms |
+| Débit | **423 806 lignes/s** | 85 902 lignes/s |
+| I/O | MinIO réel (réseau, GET+PUT) | fichiers locaux (aucun réseau) |
+| Parallélisme | 8 workers | 1 thread |
+
+Le chemin pandas lit/écrit en local (pas de round-trip réseau vers un stockage objet), ce qui l'avantage sur l'I/O — et Go reste ~4,9× plus rapide malgré ça, essentiellement grâce au parsing par regex ciblé (vs l'inférence de format générique de `pandas.to_datetime`) et à la parallélisation par workers.
+
+**Limite de cette mesure** : un seul concurrent Python testé (pandas), pas de comparaison avec Node.js, Java ou une implémentation Python multi-process — le point n'est pas un classement exhaustif, mais de documenter *une* méthodologie reproductible plutôt que d'affirmer "Go est rapide" sans preuve.
 
 ---
 
