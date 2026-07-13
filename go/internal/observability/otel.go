@@ -133,6 +133,9 @@ func tlsOpts[T any](insecure T, withTLS func(credentials.TransportCredentials) T
 func parseOTLPHeaders() map[string]string {
 	raw := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")
 	if raw == "" {
+		if key := os.Getenv("SIGNOZ_INGESTION_KEY"); key != "" {
+			return map[string]string{"signoz-ingestion-key": key}
+		}
 		return nil
 	}
 	headers := make(map[string]string)
