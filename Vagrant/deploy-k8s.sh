@@ -88,4 +88,4 @@ kubectl rollout status deployment/arteci-api -n arteci --timeout=120s
 echo ""
 echo "==> Stack ready."
 echo "    API    : curl http://localhost:${API_PORT}/health"
-echo "    SigNoz : kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring"
+echo "    SigNoz : kubectl port-forward svc/signoz 8080:8080 -n monitoring"

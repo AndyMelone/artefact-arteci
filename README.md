@@ -312,7 +312,7 @@ Le script `deploy-k8s.sh` :
 Accès à SigNoz après déploiement :
 
 ```bash
-kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring
+kubectl port-forward svc/signoz 8080:8080 -n monitoring
 # Ouvrir http://localhost:8080
 ```
 
@@ -371,7 +371,7 @@ L'API exporte traces, métriques et logs structurés via OTLP gRPC.
 |------|---------|-------|
 | Docker Compose (par défaut) | SigNoz Cloud | `https://app.us2.signoz.cloud` |
 | Docker Compose (self-hosted) | SigNoz local | `http://localhost:8080` |
-| Kubernetes | SigNoz self-hosted (Helm) | `kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring` |
+| Kubernetes | SigNoz self-hosted (Helm) | `kubectl port-forward svc/signoz 8080:8080 -n monitoring` |
 
 ### Vérifier avec SigNoz Cloud
 
@@ -395,7 +395,7 @@ docker compose -f docker/docker-compose.signoz.yml up -d
 
 **Kubernetes :**
 ```bash
-kubectl port-forward svc/signoz-signoz-0 8080:8080 -n monitoring
+kubectl port-forward svc/signoz 8080:8080 -n monitoring
 # Ouvrir http://localhost:8080
 ```
 
