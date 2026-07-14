@@ -60,7 +60,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-arteci}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-ingest.us2.signoz.cloud:443}
+      OTEL_EXPORTER_OTLP_ENDPOINT: signoz-ingester:4317
       OTEL_EXPORTER_OTLP_HEADERS: signoz-ingestion-key=${SIGNOZ_INGESTION_KEY}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-arteci-api-go}
     depends_on:
@@ -69,6 +69,7 @@ services:
     restart: unless-stopped
     networks:
       - arteci
+      - signoz
 
 volumes:
   minio-data:
@@ -76,3 +77,6 @@ volumes:
 networks:
   arteci:
     driver: bridge
+  signoz:
+    name: signoz_signoz
+    external: true
