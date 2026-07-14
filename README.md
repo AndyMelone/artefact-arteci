@@ -157,7 +157,14 @@ L'API se connecte automatiquement à `ingest.us2.signoz.cloud:443` avec TLS. Les
 SigNoz tourne localement via Docker Compose. Aucune clé requise.
 
 ```bash
+# Démarrer
 docker compose -f docker/docker-compose.signoz.yml up -d
+
+# Arrêter (données conservées — redémarrage instantané)
+docker compose -f docker/docker-compose.signoz.yml down
+
+# Arrêter et tout supprimer (ClickHouse + PostgreSQL effacés, repart de zéro)
+docker compose -f docker/docker-compose.signoz.yml down -v
 ```
 
 SigNoz UI disponible sur `http://localhost:8080` (premier démarrage : ~2 min le temps que ClickHouse s'initialise).
