@@ -20,6 +20,8 @@ Vagrant/kubeconfig.yaml
 .DS_Store
 **/.DS_Store
 
+scripts/
+
 .vscode/
 .idea/
 *.swp
