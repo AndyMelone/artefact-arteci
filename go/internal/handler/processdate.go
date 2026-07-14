@@ -35,7 +35,7 @@ var numWorkers = func() int {
 }()
 
 const (
-	batchSize    = 100_000
+	batchSize    = 10_000
 	previewMax   = 100
 	scanBufSize  = 4 * 1024 * 1024
 	writeBufSize = 4 * 1024 * 1024

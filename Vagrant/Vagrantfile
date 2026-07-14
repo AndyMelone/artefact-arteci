@@ -12,6 +12,7 @@ Vagrant.configure("2") do |config|
   config.vm.network "forwarded_port", guest: 6443, host: 16443
   config.vm.network "forwarded_port", guest: 3301, host: 3301
   config.vm.network "forwarded_port", guest: 8080, host: 8080
+  config.vm.network "forwarded_port", guest: 4317, host: 4317
 
   config.vm.provider "qemu" do |qe|
     qe.memory   = "4G"
