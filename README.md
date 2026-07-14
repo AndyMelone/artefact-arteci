@@ -156,6 +156,14 @@ L'API se connecte automatiquement à `ingest.us2.signoz.cloud:443` avec TLS. Les
 
 SigNoz tourne localement via Docker Compose. Aucune clé requise.
 
+**Ports requis libres sur l'hôte :**
+
+| Port | Usage |
+|------|-------|
+| `8080` | SigNoz UI |
+| `4317` | OTLP gRPC (réception des traces/logs/métriques) |
+| `4318` | OTLP HTTP |
+
 ```bash
 # Démarrer
 docker compose -f docker/docker-compose.signoz.yml up -d
@@ -232,6 +240,14 @@ Au démarrage, le bucket `arteci` est créé automatiquement et les fichiers de 
 
 ### Option B — Avec Docker Compose
 
+**Ports requis libres sur l'hôte :**
+
+| Port | Usage |
+|------|-------|
+| `3001` | API Go + UI démo |
+| `9000` | MinIO API |
+| `9001` | MinIO Console |
+
 ```bash
 # 1. Créer le fichier de config à la racine
 cp .env.example .env
@@ -271,6 +287,14 @@ Les traces, logs et métriques sont automatiquement envoyés vers `https://app.u
 
 Si tu préfères faire tourner SigNoz localement :
 
+**Ports requis libres sur l'hôte** (en plus des ports Option B ci-dessus) :
+
+| Port | Usage |
+|------|-------|
+| `8080` | SigNoz UI |
+| `4317` | OTLP gRPC |
+| `4318` | OTLP HTTP |
+
 ```bash
 # 1. Démarrer SigNoz (crée le réseau arteci)
 docker compose -f docker/docker-compose.signoz.yml up -d
@@ -301,6 +325,19 @@ docker compose -f docker/docker-compose.signoz.yml down -v
 ### Option C — Kubernetes (k3s via Vagrant)
 
 Prérequis : Vagrant + plugin QEMU (`vagrant plugin install vagrant-qemu`) + `envsubst` (`brew install gettext` sur Mac, pré-installé sur Linux).
+
+**Ports requis libres sur l'hôte** (forwardés depuis la VM) :
+
+| Port | Usage |
+|------|-------|
+| `3001` | API Go |
+| `9000` | MinIO API |
+| `9001` | MinIO Console |
+| `8080` | SigNoz UI |
+| `4317` | OTLP gRPC |
+| `16443` | k3s API server |
+
+> Si l'un de ces ports est occupé (ex. SigNoz Docker sur `8080`), arrêter le service concerné avant `vagrant up`.
 
 ```bash
 # 1. Créer le .env à la racine (si pas déjà fait)
