@@ -130,7 +130,7 @@ func otelMiddleware(next http.Handler) http.Handler {
 
 		durationMs := time.Since(start).Milliseconds()
 		status := "ok"
-		if rw.statusCode >= 500 {
+		if rw.statusCode >= 400 {
 			status = "error"
 			span.SetStatus(codes.Error, http.StatusText(rw.statusCode))
 		} else {
@@ -153,6 +153,7 @@ func otelMiddleware(next http.Handler) http.Handler {
 		if status == "error" {
 			observability.HTTPLog.Error(ctx, "HTTP request failed with error", observability.Attrs{
 				"method": r.Method, "path": r.URL.Path,
+				"status_code": rw.statusCode,
 				"duration_ms": durationMs, "traceId": traceID, "spanId": spanID,
 			})
 		} else {
