@@ -107,6 +107,11 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 func otelMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		ctx := r.Context()
 		spanName := r.Method + " " + r.URL.Path
 		start := time.Now()
