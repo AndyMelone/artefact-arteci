@@ -46,6 +46,7 @@ services:
 
   api-go:
     build:
+      # image: melone30/arteci-api-go:${API_IMAGE_TAG:-latest}
       context: ../
       dockerfile: go/Dockerfile
     container_name: arteci-api-go
